@@ -7,7 +7,8 @@ import qualified Data.ByteString.Char8 as BC8
 import Data.List (find)
 import Data.Maybe (catMaybes)
 import Data.String (IsString)
-import Network.HTTP.Simple (Request, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
+import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
+import Network.HTTP.Types (Status)
 import Network.HTTP.Types.Status (ok200)
 import Retry (retryIO)
 import System.FilePath ((</>))
@@ -41,28 +42,34 @@ downloadWallhavenWallpaper :: String -> IO (Maybe String)
 downloadWallhavenWallpaper url = do
   response <- parseRequest url >>= httpBS
   let status = getResponseStatus response
-  if status /= ok200
-    then do
+  if status == ok200
+    then handle200 response
+    else handleNon200 status
+  where
+    handleNon200 :: Status -> IO (Maybe String)
+    handleNon200 status = do
       printf "Received non-OK response %s for %s\n" (show status) url
       pure $ Just $ "Received non-OK response " <> show status <> " for " <> show url
-    else
+
+    handle200 :: Response ByteString -> IO (Maybe String)
+    handle200 response = do
       let contents = getResponseBody response
-       in case extractFullWallpaperLink contents of
-            Nothing -> do
-              printf "Failed to extract full wallpaper link from %s" url
-              B8.putStr $ contents <> BC8.pack "\n"
-              pure $ Just url
-            Just link -> do
-              downloadWallpaper link
-              pure Nothing
-  where
+      case extractFullWallpaperLink contents of
+        Nothing -> do
+          printf "Failed to extract full wallpaper link from %s" url
+          B8.putStr $ contents <> BC8.pack "\n"
+          pure $ Just url
+        Just link -> do
+          downloadWallpaper link
+          pure Nothing
+
     downloadWallpaper :: ByteString -> IO ()
     downloadWallpaper wallpaperLink = do
       let wallHavenLink = BC8.unpack $ toFullWallHavenLink wallpaperLink
           name = wallpaperName wallHavenLink
           path = "/Users/home/stuff/wallpapers" </> wallpaperName name
-      B8.putStr ("Downloading " <> BC8.pack name <> "\n")
       downloadResource path wallHavenLink
+      B8.putStr ("Downloaded " <> BC8.pack name <> "\n")
 
 toFullWallHavenLink :: (IsString str, Semigroup str) => str -> str
 toFullWallHavenLink relativePath =
