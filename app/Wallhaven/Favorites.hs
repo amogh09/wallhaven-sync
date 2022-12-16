@@ -7,7 +7,8 @@ import qualified Data.ByteString.Char8 as BC8
 import Data.List (find)
 import Data.Maybe (catMaybes)
 import Data.String (IsString)
-import Network.HTTP.Simple (Request, addRequestHeader, parseRequest, parseRequest_)
+import Network.HTTP.Simple (Request, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
+import Network.HTTP.Types.Status (ok200)
 import Retry (retryIO)
 import System.FilePath ((</>))
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
@@ -38,28 +39,30 @@ downloadAllFavoriteWallpapers = do
 
 downloadWallhavenWallpaper :: String -> IO (Maybe String)
 downloadWallhavenWallpaper url = do
-  maybeLink <- parseRequest url >>= fmap extractWallpaperLink . getURL
-  case maybeLink of
-    Nothing -> do
-      printf "Failed to extract link for %s\n" url
-      pure $ Just url
-    Just link -> do
-      downloadWallpaper link
-      pure Nothing
-
-downloadWallpaper :: ByteString -> IO ()
-downloadWallpaper wallpaperLink = do
-  let wallHavenLink = BC8.unpack $ toFullWallHavenLink wallpaperLink
-      name = wallpaperName wallHavenLink
-      path = "/Users/home/stuff/wallpapers" </> wallpaperName name
-  B8.putStr ("Downloading " <> BC8.pack name <> "\n")
-  downloadResource path wallHavenLink
-
-extractWallpaperLink :: (StringLike str, Show str) => str -> Maybe str
-extractWallpaperLink =
-  fmap (fromAttrib "src")
-    . find (~== ("<img id=\"wallpaper\">" :: String))
-    . parseTags
+  response <- parseRequest url >>= httpBS
+  let status = getResponseStatus response
+  if status /= ok200
+    then do
+      printf "Received non-OK response %s for %s\n" (show status) url
+      pure $ Just $ "Received non-OK response " <> show status <> " for " <> show url
+    else
+      let contents = getResponseBody response
+       in case extractFullWallpaperLink contents of
+            Nothing -> do
+              printf "Failed to extract full wallpaper link from %s" url
+              B8.putStr $ contents <> BC8.pack "\n"
+              pure $ Just url
+            Just link -> do
+              downloadWallpaper link
+              pure Nothing
+  where
+    downloadWallpaper :: ByteString -> IO ()
+    downloadWallpaper wallpaperLink = do
+      let wallHavenLink = BC8.unpack $ toFullWallHavenLink wallpaperLink
+          name = wallpaperName wallHavenLink
+          path = "/Users/home/stuff/wallpapers" </> wallpaperName name
+      B8.putStr ("Downloading " <> BC8.pack name <> "\n")
+      downloadResource path wallHavenLink
 
 toFullWallHavenLink :: (IsString str, Semigroup str) => str -> str
 toFullWallHavenLink relativePath =
@@ -71,8 +74,16 @@ downloadResource path url = parseRequest url >>= getURL >>= writeFile path
 wallpaperName :: String -> String
 wallpaperName = reverse . takeWhile (/= '/') . reverse
 
+-- Extracts a list of favorites wallpapers from Wallhaven's favorites page
 extractFavoriteWallpaperLinks :: (Show str, StringLike str) => str -> [str]
 extractFavoriteWallpaperLinks =
   fmap (fromAttrib "href")
     . filter (~== ("<a class=\"preview\">" :: String))
+    . parseTags
+
+-- Extracts a link to the full wallpaper from wallpaper preview page
+extractFullWallpaperLink :: (StringLike str, Show str) => str -> Maybe str
+extractFullWallpaperLink =
+  fmap (fromAttrib "src")
+    . find (~== ("<img id=\"wallpaper\">" :: String))
     . parseTags
