@@ -1,16 +1,16 @@
 module Wallhaven.Favorites (downloadAllFavoriteWallpapers) where
 
-import Control.Monad (unless)
 import Data.ByteString (ByteString, writeFile)
 import qualified Data.ByteString as B8
 import qualified Data.ByteString.Char8 as BC8
-import Data.List (find)
+import Data.List (find, isInfixOf)
 import Data.Maybe (catMaybes, isJust)
 import Data.String (IsString)
 import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
 import Network.HTTP.Types (Status)
 import Network.HTTP.Types.Status (ok200)
 import Retry (retryIO)
+import System.Directory (doesFileExist, listDirectory)
 import System.FilePath ((</>))
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.Printf (printf)
@@ -29,18 +29,33 @@ favoritesRequest =
 
 downloadAllFavoriteWallpapers :: IO ()
 downloadAllFavoriteWallpapers = do
-  errors <- getURL favoritesRequest >>= batchedDownload
-  unless (null errors) $ do
-    putStrLn "\nFailures: "
-    mapM_ putStrLn errors
+  localWallpapers <- loadLocalWallpapers wallpaperDir
+  errors <- getURL favoritesRequest >>= batchedDownload localWallpapers
+  if null errors
+    then putStrLn "All wallpapers were synced successfully."
+    else putStrLn "\nFailures: " >> mapM_ putStrLn errors
   where
-    batchedDownload =
+    batchedDownload localWallpapers =
       fmap catMaybes
         . processBatches
           5
           (retryIO 5 (seconds 3) isJust . downloadWallpaperFromPreviewURL)
+        . filter (not . wallpaperExists localWallpapers)
         . fmap BC8.unpack
         . extractFavoriteWallpaperLinks
+
+type PreviewURL = String
+
+wallpaperDir :: String
+wallpaperDir = "/Users/home/stuff/wallpapers"
+
+loadLocalWallpapers :: FilePath -> IO [FilePath]
+loadLocalWallpapers = listDirectory
+
+wallpaperExists :: [FilePath] -> PreviewURL -> Bool
+wallpaperExists wallpapers url = any contains wallpapers
+  where
+    contains wallpaper = wallpaperName url `isInfixOf` wallpaper
 
 -- Attempts to download a wallhaven wallpaper from wallpaper preview
 -- URL. Returns a Maybe error on any failure and Nothing if download
@@ -74,9 +89,13 @@ downloadWallpaperFromPreviewURL url = do
     downloadWallpaper wallpaperLink = do
       let wallHavenLink = BC8.unpack $ toFullWallHavenLink wallpaperLink
           name = wallpaperName wallHavenLink
-          path = "/Users/home/stuff/wallpapers" </> wallpaperName name
-      downloadResource path wallHavenLink
-      B8.putStr ("Downloaded " <> BC8.pack name <> "\n")
+          path = wallpaperDir </> wallpaperName name
+      exists <- doesFileExist path
+      if exists
+        then printf "%s already exists, skipping download" name
+        else do
+          downloadResource path wallHavenLink
+          B8.putStr ("Downloaded " <> BC8.pack name <> "\n")
 
 toFullWallHavenLink :: (IsString str, Semigroup str) => str -> str
 toFullWallHavenLink relativePath =
