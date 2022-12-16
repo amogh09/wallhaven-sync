@@ -65,7 +65,7 @@ type PreviewURL = String
 type Error = String
 
 wallpaperDir :: String
-wallpaperDir = "/Users/home/stuff/wallpapers2"
+wallpaperDir = "/Users/home/stuff/wallpapers"
 
 loadLocalWallpapers :: FilePath -> IO [FilePath]
 loadLocalWallpapers = listDirectory
