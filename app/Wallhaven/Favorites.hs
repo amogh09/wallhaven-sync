@@ -5,7 +5,7 @@ import Data.ByteString (ByteString, writeFile)
 import qualified Data.ByteString as B8
 import qualified Data.ByteString.Char8 as BC8
 import Data.List (find)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import Data.String (IsString)
 import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
 import Network.HTTP.Types (Status)
@@ -30,16 +30,23 @@ favoritesRequest =
 downloadAllFavoriteWallpapers :: IO ()
 downloadAllFavoriteWallpapers = do
   errors <- getURL favoritesRequest >>= batchedDownload
-  unless (null errors) $ putStrLn $ "Failures: " <> show errors
+  unless (null errors) $ do
+    putStrLn "\nFailures: "
+    mapM_ putStrLn errors
   where
     batchedDownload =
       fmap catMaybes
-        . processBatches 5 (retryIO 5 (seconds 3) . downloadWallhavenWallpaper)
+        . processBatches
+          5
+          (retryIO 5 (seconds 3) isJust . downloadWallpaperFromPreviewURL)
         . fmap BC8.unpack
         . extractFavoriteWallpaperLinks
 
-downloadWallhavenWallpaper :: String -> IO (Maybe String)
-downloadWallhavenWallpaper url = do
+-- Attempts to download a wallhaven wallpaper from wallpaper preview
+-- URL. Returns a Maybe error on any failure and Nothing if download
+-- was successful.
+downloadWallpaperFromPreviewURL :: String -> IO (Maybe String)
+downloadWallpaperFromPreviewURL url = do
   response <- parseRequest url >>= httpBS
   let status = getResponseStatus response
   if status == ok200
@@ -49,7 +56,7 @@ downloadWallhavenWallpaper url = do
     handleNon200 :: Status -> IO (Maybe String)
     handleNon200 status = do
       printf "Received non-OK response %s for %s\n" (show status) url
-      pure $ Just $ "Received non-OK response " <> show status <> " for " <> show url
+      pure $ Just $ url <> " - received non-OK response " <> show status
 
     handle200 :: Response ByteString -> IO (Maybe String)
     handle200 response = do

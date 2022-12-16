@@ -2,10 +2,10 @@ module Retry (retryIO) where
 
 import Control.Concurrent (threadDelay)
 
-retryIO :: Int -> Int -> IO (Maybe a) -> IO (Maybe a)
-retryIO 1 _ a = a
-retryIO !attempts delay a = do
+retryIO :: Int -> Int -> (a -> Bool) -> IO a -> IO a
+retryIO 1 _ _ a = a
+retryIO !attempts delay shouldRetry a = do
   res <- a
-  case res of
-    Just err -> threadDelay delay >> retryIO (attempts - 1) delay a
-    Nothing -> pure res
+  if shouldRetry res
+    then threadDelay delay >> retryIO (attempts - 1) delay shouldRetry a
+    else pure res
