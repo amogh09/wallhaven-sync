@@ -20,34 +20,52 @@ import Util.HTTP (getURL)
 import Util.Time (seconds)
 import Prelude hiding (writeFile)
 
-favoritesRequest :: Request
-favoritesRequest =
-  addRequestHeader "Cookie" cookie $
-    parseRequest_ "https://wallhaven.cc/favorites"
+favoritesRequest :: Int -> Request
+favoritesRequest page =
+  addRequestHeader "Cookie" cookie
+    . parseRequest_
+    $ "https://wallhaven.cc/favorites?page=" <> show page
   where
     cookie = "_pk_ref.1.01b8=%5B%22%22%2C%22%22%2C1670991299%2C%22https%3A%2F%2Fwww.google.com%2F%22%5D; _pk_id.1.01b8=f8b13398227e49a9.1661996195.; cf_clearance=V2JMHapfaF8hLGoMS5ggNx8mHVtxYzVOWlmZCguI5W8-1670981239-0-250; remember_web_59ba36addc2b2f9401580f014c7f58ea4e30989d=eyJpdiI6IndHK09OM0lTWm1wb0lneWx0SndnUGc9PSIsInZhbHVlIjoiZ1RjSDJvQUpXWXpSdnJlTmo3cjNkU2UxQ3Q4K3RtNnNXOTNLTTJ2OThicDJtOXBBZlYwYlpXNkRBVzF5RXR4T0V3ZmFmMEhxZFdVeHlKaEdnSFdyaDlGb25PR0xabCtTSXpabU9vNnpGMVdzKzJrSXBsdkFrb1BlTm5pSU5CWnBPOGVRS09vRllDWTJRSkRKZzV5a2JvQ3NNSFdldGhEZkI3UXFHR0dwc0t0MzNra3pscjVPRlZmSFpcL2NxWFErZCIsIm1hYyI6Ijg2ZWFkNmU2NjA2MTcxY2MwOGNjNTg4MDY0M2E5NjRlMWMzOWNhN2JmZTliYmYwOTI4NzNmOGQ3ZGIzMzVlMmQifQ%3D%3D"
 
 downloadAllFavoriteWallpapers :: IO ()
 downloadAllFavoriteWallpapers = do
   localWallpapers <- loadLocalWallpapers wallpaperDir
-  errors <- getURL favoritesRequest >>= batchedDownload localWallpapers
+  errors <- catMaybes <$> downloadFavoriteWallpapersStartingPage localWallpapers 1
   if null errors
     then putStrLn "All wallpapers were synced successfully."
     else putStrLn "\nFailures: " >> mapM_ putStrLn errors
+
+downloadFavoriteWallpapersStartingPage :: [FilePath] -> Int -> IO [Maybe Error]
+downloadFavoriteWallpapersStartingPage localWallpapers page = do
+  printf "Starting page %d\n" page
+  previewURLs <- getPreviewURLs
+  if null previewURLs
+    then return []
+    else
+      (<>)
+        <$> batchedDownload previewURLs
+        <*> downloadFavoriteWallpapersStartingPage localWallpapers (page + 1)
   where
-    batchedDownload localWallpapers =
-      fmap catMaybes
-        . processBatches
-          5
-          (retryIO 5 (seconds 3) isJust . downloadWallpaperFromPreviewURL)
+    batchedDownload :: [PreviewURL] -> IO [Maybe Error]
+    batchedDownload =
+      processBatches
+        5
+        (retryIO 5 (seconds 3) isJust . downloadWallpaperFromPreviewURL)
         . filter (not . wallpaperExists localWallpapers)
-        . fmap BC8.unpack
+
+    getPreviewURLs :: IO [PreviewURL]
+    getPreviewURLs =
+      fmap BC8.unpack
         . extractFavoriteWallpaperLinks
+        <$> getURL (favoritesRequest page)
 
 type PreviewURL = String
 
+type Error = String
+
 wallpaperDir :: String
-wallpaperDir = "/Users/home/stuff/wallpapers"
+wallpaperDir = "/Users/home/stuff/wallpapers2"
 
 loadLocalWallpapers :: FilePath -> IO [FilePath]
 loadLocalWallpapers = listDirectory
@@ -60,7 +78,7 @@ wallpaperExists wallpapers url = any contains wallpapers
 -- Attempts to download a wallhaven wallpaper from wallpaper preview
 -- URL. Returns a Maybe error on any failure and Nothing if download
 -- was successful.
-downloadWallpaperFromPreviewURL :: String -> IO (Maybe String)
+downloadWallpaperFromPreviewURL :: PreviewURL -> IO (Maybe Error)
 downloadWallpaperFromPreviewURL url = do
   response <- parseRequest url >>= httpBS
   let status = getResponseStatus response
@@ -68,12 +86,12 @@ downloadWallpaperFromPreviewURL url = do
     then handle200 response
     else handleNon200 status
   where
-    handleNon200 :: Status -> IO (Maybe String)
+    handleNon200 :: Status -> IO (Maybe Error)
     handleNon200 status = do
       printf "Received non-OK response %s for %s\n" (show status) url
       pure $ Just $ url <> " - received non-OK response " <> show status
 
-    handle200 :: Response ByteString -> IO (Maybe String)
+    handle200 :: Response ByteString -> IO (Maybe Error)
     handle200 response = do
       let contents = getResponseBody response
       case extractFullWallpaperLink contents of
