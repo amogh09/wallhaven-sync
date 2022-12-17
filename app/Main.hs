@@ -1,7 +1,7 @@
 module Main where
 
-import Wallhaven.Favorites (downloadAllFavoriteWallpapers)
+import Wallhaven.CLI (runAppWithDefaultConfig)
 import Prelude hiding (writeFile)
 
 main :: IO ()
-main = downloadAllFavoriteWallpapers
+main = runAppWithDefaultConfig

@@ -1,4 +1,4 @@
-module Wallhaven.Favorites (downloadAllFavoriteWallpapers) where
+module Wallhaven.Favorites (downloadAllFavoriteWallpapers, Config (..), Error) where
 
 import Data.ByteString (ByteString, writeFile)
 import qualified Data.ByteString as B8
@@ -20,24 +20,37 @@ import Util.HTTP (getURL)
 import Util.Time (seconds)
 import Prelude hiding (writeFile)
 
-favoritesRequest :: Int -> Request
-favoritesRequest page =
-  addRequestHeader "Cookie" cookie
+-- Configuration structure.
+data Config = Config
+  { -- | The directory where the wallpapers will be saved.
+    configWallpaperDir :: FilePath,
+    -- | The number of wallpapers to download in parallel.
+    configNumParallelDownloads :: Int,
+    -- | The number of retries to perform when downloading a wallpaper.
+    configNumRetries :: Int,
+    -- | The number of seconds to wait between retries.
+    configRetryDelay :: Int,
+    -- | Cookie to use for authentication.
+    configCookie :: ByteString
+  }
+
+type Error = String
+
+favoritesRequest :: Config -> Int -> Request
+favoritesRequest config page =
+  addRequestHeader "Cookie" (configCookie config)
     . parseRequest_
     $ "https://wallhaven.cc/favorites?page=" <> show page
-  where
-    cookie = "_pk_ref.1.01b8=%5B%22%22%2C%22%22%2C1670991299%2C%22https%3A%2F%2Fwww.google.com%2F%22%5D; _pk_id.1.01b8=f8b13398227e49a9.1661996195.; cf_clearance=V2JMHapfaF8hLGoMS5ggNx8mHVtxYzVOWlmZCguI5W8-1670981239-0-250; remember_web_59ba36addc2b2f9401580f014c7f58ea4e30989d=eyJpdiI6IndHK09OM0lTWm1wb0lneWx0SndnUGc9PSIsInZhbHVlIjoiZ1RjSDJvQUpXWXpSdnJlTmo3cjNkU2UxQ3Q4K3RtNnNXOTNLTTJ2OThicDJtOXBBZlYwYlpXNkRBVzF5RXR4T0V3ZmFmMEhxZFdVeHlKaEdnSFdyaDlGb25PR0xabCtTSXpabU9vNnpGMVdzKzJrSXBsdkFrb1BlTm5pSU5CWnBPOGVRS09vRllDWTJRSkRKZzV5a2JvQ3NNSFdldGhEZkI3UXFHR0dwc0t0MzNra3pscjVPRlZmSFpcL2NxWFErZCIsIm1hYyI6Ijg2ZWFkNmU2NjA2MTcxY2MwOGNjNTg4MDY0M2E5NjRlMWMzOWNhN2JmZTliYmYwOTI4NzNmOGQ3ZGIzMzVlMmQifQ%3D%3D"
 
-downloadAllFavoriteWallpapers :: IO ()
-downloadAllFavoriteWallpapers = do
-  localWallpapers <- loadLocalWallpapers wallpaperDir
-  errors <- catMaybes <$> downloadFavoriteWallpapersStartingPage localWallpapers 1
-  if null errors
-    then putStrLn "All wallpapers were synced successfully."
-    else putStrLn "\nFailures: " >> mapM_ putStrLn errors
+downloadAllFavoriteWallpapers :: Config -> IO [Error]
+downloadAllFavoriteWallpapers config = do
+  localWallpapers <- loadLocalWallpapers $ configWallpaperDir config
+  catMaybes <$> downloadFavWallpapersFromPage config localWallpapers 1
 
-downloadFavoriteWallpapersStartingPage :: [FilePath] -> Int -> IO [Maybe Error]
-downloadFavoriteWallpapersStartingPage localWallpapers page = do
+-- Downloads favorites wallpapers starting from the provided page number.
+-- Skips wallpapers that already exist in the wallpapers directory.
+downloadFavWallpapersFromPage :: Config -> [FilePath] -> Int -> IO [Maybe Error]
+downloadFavWallpapersFromPage config localWallpapers page = do
   printf "Starting page %d\n" page
   previewURLs <- getPreviewURLs
   if null previewURLs
@@ -45,27 +58,24 @@ downloadFavoriteWallpapersStartingPage localWallpapers page = do
     else
       (<>)
         <$> batchedDownload previewURLs
-        <*> downloadFavoriteWallpapersStartingPage localWallpapers (page + 1)
+        <*> downloadFavWallpapersFromPage config localWallpapers (page + 1)
   where
     batchedDownload :: [PreviewURL] -> IO [Maybe Error]
     batchedDownload =
       processBatches
-        5
-        (retryIO 5 (seconds 3) isJust . downloadWallpaperFromPreviewURL)
+        (configNumParallelDownloads config)
+        ( retryIO (configNumRetries config) (seconds $ configRetryDelay config) isJust
+            . downloadWallpaperFromPreviewURL config
+        )
         . filter (not . wallpaperExists localWallpapers)
 
     getPreviewURLs :: IO [PreviewURL]
     getPreviewURLs =
       fmap BC8.unpack
         . extractFavoriteWallpaperLinks
-        <$> getURL (favoritesRequest page)
+        <$> getURL (favoritesRequest config page)
 
 type PreviewURL = String
-
-type Error = String
-
-wallpaperDir :: String
-wallpaperDir = "/Users/home/stuff/wallpapers"
 
 loadLocalWallpapers :: FilePath -> IO [FilePath]
 loadLocalWallpapers = listDirectory
@@ -78,8 +88,8 @@ wallpaperExists wallpapers url = any contains wallpapers
 -- Attempts to download a wallhaven wallpaper from wallpaper preview
 -- URL. Returns a Maybe error on any failure and Nothing if download
 -- was successful.
-downloadWallpaperFromPreviewURL :: PreviewURL -> IO (Maybe Error)
-downloadWallpaperFromPreviewURL url = do
+downloadWallpaperFromPreviewURL :: Config -> PreviewURL -> IO (Maybe Error)
+downloadWallpaperFromPreviewURL config url = do
   response <- parseRequest url >>= httpBS
   let status = getResponseStatus response
   if status == ok200
@@ -107,7 +117,7 @@ downloadWallpaperFromPreviewURL url = do
     downloadWallpaper wallpaperLink = do
       let wallHavenLink = BC8.unpack $ toFullWallHavenLink wallpaperLink
           name = wallpaperName wallHavenLink
-          path = wallpaperDir </> wallpaperName name
+          path = configWallpaperDir config </> wallpaperName name
       exists <- doesFileExist path
       if exists
         then printf "%s already exists, skipping download" name
