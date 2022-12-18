@@ -9,7 +9,6 @@ import Data.Maybe (catMaybes, isJust)
 import Data.String (IsString)
 import Network.HTTP.Client.Conduit (HttpException (HttpExceptionRequest), HttpExceptionContent)
 import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
-import Network.HTTP.Types (Status)
 import Network.HTTP.Types.Status (ok200)
 import Retry (retryIO)
 import System.Directory (createDirectoryIfMissing, doesFileExist, listDirectory)
@@ -109,43 +108,37 @@ wallpaperExists wallpapers url = any contains wallpapers
 -- was successful.
 downloadWallpaperFromPreviewURL :: Config -> PreviewURL -> IO (Maybe Error)
 downloadWallpaperFromPreviewURL config url = do
-  response <- parseRequest url >>= httpBS
-  let status = getResponseStatus response
-  if status == ok200
-    then handle200 response
-    else handleNon200 status
+  parseRequest url
+    >>= fmap fullLinkFromPreviewResponse . httpBS
+    >>= either
+      (pure . Just)
+      (\link -> downloadWallpaper (wallpaperPath link) (fullWallpaperLink link) >> pure Nothing)
   where
-    handleNon200 :: Status -> IO (Maybe Error)
-    handleNon200 status = do
-      printf "Received non-OK response %s for %s\n" (show status) url
-      pure $ Just $ url <> " - received non-OK response " <> show status
+    fullLinkFromPreviewResponse :: Response ByteString -> Either Error String
+    fullLinkFromPreviewResponse response = do
+      let status = getResponseStatus response
+      if status == ok200
+        then
+          maybe (Left "Failed to extract full wallpaper link from preview URL") (Right . BC8.unpack)
+            . extractFullWallpaperLink
+            $ getResponseBody response
+        else Left $ "Received non-OK response when getting preview page: " <> show status
 
-    handle200 :: Response ByteString -> IO (Maybe Error)
-    handle200 response = do
-      let contents = getResponseBody response
-      case extractFullWallpaperLink contents of
-        Nothing -> do
-          printf "Failed to extract full wallpaper link from %s" url
-          B8.putStr $ contents <> BC8.pack "\n"
-          pure $ Just url
-        Just link -> do
-          downloadWallpaper link
-          pure Nothing
+    wallpaperPath :: String -> FilePath
+    wallpaperPath link = configWallpaperDir config </> wallpaperName link
 
-    downloadWallpaper :: ByteString -> IO ()
-    downloadWallpaper wallpaperLink = do
-      let wallHavenLink = BC8.unpack $ toFullWallHavenLink wallpaperLink
-          name = wallpaperName wallHavenLink
-          path = configWallpaperDir config </> wallpaperName name
+    downloadWallpaper :: String -> String -> IO ()
+    downloadWallpaper path link = do
+      let name = wallpaperName link
       exists <- doesFileExist path
       if exists
         then printf "%s already exists, skipping download" name
         else do
-          downloadResource path wallHavenLink
+          downloadResource path link
           B8.putStr ("Downloaded " <> BC8.pack name <> "\n")
 
-toFullWallHavenLink :: (IsString str, Semigroup str) => str -> str
-toFullWallHavenLink relativePath = "https://w.wallhaven.cc" <> relativePath
+    fullWallpaperLink :: (IsString str, Semigroup str) => str -> str
+    fullWallpaperLink relativePath = "https://w.wallhaven.cc" <> relativePath
 
 downloadResource :: FilePath -> String -> IO ()
 downloadResource path url = parseRequest url >>= getURL >>= writeFile path
