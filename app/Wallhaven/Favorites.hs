@@ -5,10 +5,11 @@ import Data.ByteString (ByteString, writeFile)
 import qualified Data.ByteString as B8
 import qualified Data.ByteString.Char8 as BC8
 import Data.List (find, isInfixOf)
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe (catMaybes)
 import Data.String (IsString)
 import Network.HTTP.Client.Conduit (HttpException (HttpExceptionRequest), HttpExceptionContent)
 import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
+import Network.HTTP.Types (tooManyRequests429)
 import Network.HTTP.Types.Status (ok200)
 import Retry (retryIO)
 import System.Directory (createDirectoryIfMissing, doesFileExist, listDirectory)
@@ -17,7 +18,6 @@ import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.Printf (printf)
 import Text.StringLike (StringLike)
 import Util.Batch (processBatches)
-import Util.HTTP (getURL)
 import Util.Time (seconds)
 import Prelude hiding (writeFile)
 
@@ -36,6 +36,8 @@ data Config = Config
   }
 
 type Error = String
+
+type PreviewURL = String
 
 favoritesRequest :: Config -> Int -> Request
 favoritesRequest config page =
@@ -69,9 +71,7 @@ downloadFavWallpapersFromPage config localWallpapers page = do
     batchedDownload =
       processBatches
         (configNumParallelDownloads config)
-        ( retryIO (configNumRetries config) (seconds $ configRetryDelay config) isJust
-            . downloadWallpaperFromPreviewURL config
-        )
+        (downloadWallpaperFromPreviewURL config)
         . filter (not . wallpaperExists localWallpapers)
 
 -- Get preview URLs of all favorite wallpapers.
@@ -79,7 +79,7 @@ getPreviewURLs :: Config -> Int -> IO (Either Error [PreviewURL])
 getPreviewURLs config page =
   catchJust
     httpExceptionRequest
-    (parsePreviewURLs <$> httpBS (favoritesRequest config page))
+    (parsePreviewURLs <$> httpBSWithRetry config (favoritesRequest config page))
     (\err -> pure . Left $ "Failed to get favorites page: " <> show err)
   where
     httpExceptionRequest :: HttpException -> Maybe HttpExceptionContent
@@ -91,9 +91,19 @@ getPreviewURLs config page =
       let status = getResponseStatus response
       if status == ok200
         then pure . fmap BC8.unpack . extractFavoriteWallpaperLinks $ getResponseBody response
-        else error $ "Received non-OK response when getting favorites page: " <> show status
+        else
+          Left $
+            "Received non-OK response when getting favorites page "
+              <> show page
+              <> ": "
+              <> show status
 
-type PreviewURL = String
+httpBSWithRetry :: Config -> Request -> IO (Response ByteString)
+httpBSWithRetry cfg request =
+  let retryMicros = seconds $ configRetryDelay cfg
+   in retryIO (configNumRetries cfg) retryMicros ((== tooManyRequests429) . getResponseStatus)
+        . httpBS
+        $ addRequestHeader "Cookie" (configCookie cfg) request
 
 loadLocalWallpapers :: FilePath -> IO [FilePath]
 loadLocalWallpapers = listDirectory
@@ -107,19 +117,21 @@ wallpaperExists wallpapers url = any contains wallpapers
 -- URL. Returns a Maybe error on any failure and Nothing if download
 -- was successful.
 downloadWallpaperFromPreviewURL :: Config -> PreviewURL -> IO (Maybe Error)
-downloadWallpaperFromPreviewURL config url = do
+downloadWallpaperFromPreviewURL config url =
   parseRequest url
-    >>= fmap fullLinkFromPreviewResponse . httpBS
+    >>= fmap fullLinkFromPreviewResponse . httpBSWithRetry config
     >>= either
       (pure . Just)
-      (\link -> downloadWallpaper (wallpaperPath link) (fullWallpaperLink link) >> pure Nothing)
+      (\link -> downloadWallpaper (wallpaperPath link) link >> pure Nothing)
   where
     fullLinkFromPreviewResponse :: Response ByteString -> Either Error String
     fullLinkFromPreviewResponse response = do
       let status = getResponseStatus response
       if status == ok200
         then
-          maybe (Left "Failed to extract full wallpaper link from preview URL") (Right . BC8.unpack)
+          maybe
+            (Left "Failed to extract full wallpaper link from preview URL")
+            (Right . BC8.unpack . fullWallpaperLink)
             . extractFullWallpaperLink
             $ getResponseBody response
         else Left $ "Received non-OK response when getting preview page: " <> show status
@@ -134,14 +146,15 @@ downloadWallpaperFromPreviewURL config url = do
       if exists
         then printf "%s already exists, skipping download" name
         else do
-          downloadResource path link
+          downloadResource config path link
           B8.putStr ("Downloaded " <> BC8.pack name <> "\n")
 
     fullWallpaperLink :: (IsString str, Semigroup str) => str -> str
     fullWallpaperLink relativePath = "https://w.wallhaven.cc" <> relativePath
 
-downloadResource :: FilePath -> String -> IO ()
-downloadResource path url = parseRequest url >>= getURL >>= writeFile path
+downloadResource :: Config -> FilePath -> String -> IO ()
+downloadResource config path url =
+  parseRequest url >>= httpBSWithRetry config >>= writeFile path . getResponseBody
 
 wallpaperName :: String -> String
 wallpaperName = reverse . takeWhile (/= '/') . reverse
