@@ -94,7 +94,7 @@ runCLIApp = do
             "All wallpapers were synced successfully to %s\n"
             (configWallpaperDir config)
         else do
-          printf "Failed to sync %d wallpapers due to errors:\n" (length errors)
+          putStrLn "Failed to sync wallpapers due to errors:"
           mapM_ putStrLn errors
   where
     opts =

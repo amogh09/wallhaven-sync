@@ -1,11 +1,13 @@
 module Wallhaven.Favorites (downloadAllFavoriteWallpapers, Config (..), Error) where
 
+import Control.Exception (catchJust)
 import Data.ByteString (ByteString, writeFile)
 import qualified Data.ByteString as B8
 import qualified Data.ByteString.Char8 as BC8
 import Data.List (find, isInfixOf)
 import Data.Maybe (catMaybes, isJust)
 import Data.String (IsString)
+import Network.HTTP.Client.Conduit (HttpException (HttpExceptionRequest), HttpExceptionContent)
 import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
 import Network.HTTP.Types (Status)
 import Network.HTTP.Types.Status (ok200)
@@ -53,13 +55,16 @@ downloadAllFavoriteWallpapers config = do
 downloadFavWallpapersFromPage :: Config -> [FilePath] -> Int -> IO [Maybe Error]
 downloadFavWallpapersFromPage config localWallpapers page = do
   printf "Starting page %d\n" page
-  previewURLs <- getPreviewURLs
-  if null previewURLs
-    then return []
-    else
-      (<>)
-        <$> batchedDownload previewURLs
-        <*> downloadFavWallpapersFromPage config localWallpapers (page + 1)
+  previewURLsOrErr <- getPreviewURLs config page
+  case previewURLsOrErr of
+    Left err -> pure [Just err]
+    Right previewURLs ->
+      if null previewURLs
+        then return []
+        else
+          (<>)
+            <$> batchedDownload previewURLs
+            <*> downloadFavWallpapersFromPage config localWallpapers (page + 1)
   where
     batchedDownload :: [PreviewURL] -> IO [Maybe Error]
     batchedDownload =
@@ -70,11 +75,24 @@ downloadFavWallpapersFromPage config localWallpapers page = do
         )
         . filter (not . wallpaperExists localWallpapers)
 
-    getPreviewURLs :: IO [PreviewURL]
-    getPreviewURLs =
-      fmap BC8.unpack
-        . extractFavoriteWallpaperLinks
-        <$> getURL (favoritesRequest config page)
+-- Get preview URLs of all favorite wallpapers.
+getPreviewURLs :: Config -> Int -> IO (Either Error [PreviewURL])
+getPreviewURLs config page =
+  catchJust
+    httpExceptionRequest
+    (parsePreviewURLs <$> httpBS (favoritesRequest config page))
+    (\err -> pure . Left $ "Failed to get favorites page: " <> show err)
+  where
+    httpExceptionRequest :: HttpException -> Maybe HttpExceptionContent
+    httpExceptionRequest (HttpExceptionRequest _ content) = Just content
+    httpExceptionRequest _ = Nothing
+
+    parsePreviewURLs :: Response ByteString -> Either Error [PreviewURL]
+    parsePreviewURLs response = do
+      let status = getResponseStatus response
+      if status == ok200
+        then pure . fmap BC8.unpack . extractFavoriteWallpaperLinks $ getResponseBody response
+        else error $ "Received non-OK response when getting favorites page: " <> show status
 
 type PreviewURL = String
 
@@ -127,8 +145,7 @@ downloadWallpaperFromPreviewURL config url = do
           B8.putStr ("Downloaded " <> BC8.pack name <> "\n")
 
 toFullWallHavenLink :: (IsString str, Semigroup str) => str -> str
-toFullWallHavenLink relativePath =
-  "https://w.wallhaven.cc" <> relativePath
+toFullWallHavenLink relativePath = "https://w.wallhaven.cc" <> relativePath
 
 downloadResource :: FilePath -> String -> IO ()
 downloadResource path url = parseRequest url >>= getURL >>= writeFile path
