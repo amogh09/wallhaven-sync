@@ -122,7 +122,7 @@ downloadWallpaperFromPreviewURL config url =
     >>= fmap fullLinkFromPreviewResponse . httpBSWithRetry config
     >>= either
       (pure . Just)
-      (\link -> downloadWallpaper (wallpaperPath link) link >> pure Nothing)
+      (\link -> downloadWallpaper config (wallpaperPath link) link >> pure Nothing)
   where
     fullLinkFromPreviewResponse :: Response ByteString -> Either Error String
     fullLinkFromPreviewResponse response = do
@@ -139,22 +139,22 @@ downloadWallpaperFromPreviewURL config url =
     wallpaperPath :: String -> FilePath
     wallpaperPath link = configWallpaperDir config </> wallpaperName link
 
-    downloadWallpaper :: String -> String -> IO ()
-    downloadWallpaper path link = do
-      let name = wallpaperName link
-      exists <- doesFileExist path
-      if exists
-        then printf "%s already exists, skipping download" name
-        else do
-          downloadResource config path link
-          B8.putStr ("Downloaded " <> BC8.pack name <> "\n")
-
     fullWallpaperLink :: (IsString str, Semigroup str) => str -> str
     fullWallpaperLink relativePath = "https://w.wallhaven.cc" <> relativePath
 
-downloadResource :: Config -> FilePath -> String -> IO ()
-downloadResource config path url =
-  parseRequest url >>= httpBSWithRetry config >>= writeFile path . getResponseBody
+downloadWallpaper :: Config -> FilePath -> String -> IO ()
+downloadWallpaper config path link = do
+  let name = wallpaperName link
+  exists <- doesFileExist path
+  if exists
+    then printf "%s already exists, skipping download" name
+    else do
+      downloadResource link
+      B8.putStr $ "Downloaded " <> BC8.pack name <> "\n"
+  where
+    downloadResource :: String -> IO ()
+    downloadResource url =
+      parseRequest url >>= httpBSWithRetry config >>= writeFile path . getResponseBody
 
 wallpaperName :: String -> String
 wallpaperName = reverse . takeWhile (/= '/') . reverse
