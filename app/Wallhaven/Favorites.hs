@@ -10,7 +10,7 @@ import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody
 import Network.HTTP.Types (Status)
 import Network.HTTP.Types.Status (ok200)
 import Retry (retryIO)
-import System.Directory (doesFileExist, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesFileExist, listDirectory)
 import System.FilePath ((</>))
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.Printf (printf)
@@ -44,6 +44,7 @@ favoritesRequest config page =
 
 downloadAllFavoriteWallpapers :: Config -> IO [Error]
 downloadAllFavoriteWallpapers config = do
+  createDirectoryIfMissing True $ configWallpaperDir config
   localWallpapers <- loadLocalWallpapers $ configWallpaperDir config
   catMaybes <$> downloadFavWallpapersFromPage config localWallpapers 1
 

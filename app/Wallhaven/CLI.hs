@@ -1,12 +1,13 @@
-module Wallhaven.CLI (loadDefaultConfig, runAppWithDefaultConfig) where
+module Wallhaven.CLI (runCLIApp) where
 
 import Control.Exception (catchJust)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
+import Options.Applicative
 import System.Environment (getEnv)
 import System.IO.Error (isDoesNotExistError)
 import Text.Printf (printf)
-import Wallhaven.Favorites (Config (Config), Error, downloadAllFavoriteWallpapers)
+import Wallhaven.Favorites (Config (Config, configWallpaperDir), Error, downloadAllFavoriteWallpapers)
 
 wallhavenCookieEnvVarName :: String
 wallhavenCookieEnvVarName = "WALLHAVEN_COOKIE"
@@ -15,7 +16,7 @@ errorWallhavenCookieNotSet :: String
 errorWallhavenCookieNotSet = wallhavenCookieEnvVarName <> " cookie not set"
 
 defaultWallpaperDir :: FilePath
-defaultWallpaperDir = "/Users/home/stuff/wallpapers"
+defaultWallpaperDir = "/Users/home/wallpapers"
 
 -- Load cookie from environment variable.
 loadCookieFromEnv :: IO (Either Error ByteString)
@@ -27,19 +28,79 @@ loadCookieFromEnv =
   where
     doesNotExistErr e = if isDoesNotExistError e then Just () else Nothing
 
--- Load default configuration.
-loadDefaultConfig :: IO (Either Error Config)
-loadDefaultConfig = fmap (Config defaultWallpaperDir 5 5 3) <$> loadCookieFromEnv
+data CLIOpts = CLIOpts
+  { cliOptsWallpaperDir :: FilePath,
+    cliOptsNumParallelDownloads :: Int,
+    cliOptsNumRetries :: Int,
+    cliOptsRetryDelay :: Int
+  }
 
-runAppWithDefaultConfig :: IO ()
-runAppWithDefaultConfig = do
-  configOrErr <- loadDefaultConfig
+-- Parser for command line options.
+cliOptsParser :: Parser CLIOpts
+cliOptsParser =
+  CLIOpts
+    <$> strOption
+      ( long "wallpaper-dir"
+          <> metavar "DIRECTORY"
+          <> value defaultWallpaperDir
+          <> showDefault
+          <> help "Directory where wallpapers will be saved"
+      )
+    <*> option
+      auto
+      ( long "num-parallel-downloads"
+          <> metavar "NUM"
+          <> value 5
+          <> showDefault
+          <> help "Number of wallpapers to download in parallel"
+      )
+    <*> option
+      auto
+      ( long "num-retries"
+          <> metavar "NUM"
+          <> value 5
+          <> showDefault
+          <> help "Number of retries to perform when downloading a wallpaper"
+      )
+    <*> option
+      auto
+      ( long "retry-delay"
+          <> metavar "NUM"
+          <> value 3
+          <> showDefault
+          <> help "Number of seconds to wait between retries"
+      )
+
+cliOptsToConfig :: CLIOpts -> ByteString -> Config
+cliOptsToConfig opts =
+  Config
+    (cliOptsWallpaperDir opts)
+    (cliOptsNumParallelDownloads opts)
+    (cliOptsNumRetries opts)
+    (cliOptsRetryDelay opts)
+
+runCLIApp :: IO ()
+runCLIApp = do
+  cliOpts <- execParser opts
+  cookie <- loadCookieFromEnv
+  let configOrErr = cliOptsToConfig cliOpts <$> cookie
   case configOrErr of
     Left err -> putStrLn err
     Right config -> do
       errors <- downloadAllFavoriteWallpapers config
       if null errors
-        then putStrLn "All wallpapers were synced successfully."
+        then
+          printf
+            "All wallpapers were synced successfully to %s\n"
+            (configWallpaperDir config)
         else do
-          printf "Failed to sync %d wallpapers due to errors:" (length errors)
+          printf "Failed to sync %d wallpapers due to errors:\n" (length errors)
           mapM_ putStrLn errors
+  where
+    opts =
+      info
+        (cliOptsParser <**> helper)
+        ( fullDesc
+            <> progDesc "Sync wallpapers from Wallhaven favorites"
+            <> header "wallhaven-sync"
+        )
