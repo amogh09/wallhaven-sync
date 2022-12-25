@@ -99,11 +99,12 @@ getPreviewURLs config page =
               <> show status
 
 httpBSWithRetry :: Config -> Request -> IO (Response ByteString)
-httpBSWithRetry cfg request =
-  let retryMicros = seconds $ configRetryDelay cfg
-   in retryIO (configNumRetries cfg) retryMicros ((== tooManyRequests429) . getResponseStatus)
-        . httpBS
-        $ addRequestHeader "Cookie" (configCookie cfg) request
+httpBSWithRetry cfg =
+  retryIO
+    (configNumRetries cfg)
+    (seconds $ configRetryDelay cfg)
+    ((== tooManyRequests429) . getResponseStatus)
+    . httpBS
 
 loadLocalWallpapers :: FilePath -> IO [FilePath]
 loadLocalWallpapers = listDirectory
