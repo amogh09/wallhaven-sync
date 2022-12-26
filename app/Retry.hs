@@ -1,9 +1,13 @@
-module Retry (retryIO) where
+module Retry (retryIO, MaxAttempts, RetryDelayMicros) where
 
 import Control.Concurrent (threadDelay)
 
-retryIO :: Int -> Int -> (a -> Bool) -> IO a -> IO a
-retryIO 1 _ _ a = a
+type MaxAttempts = Int
+
+type RetryDelayMicros = Int
+
+retryIO :: MaxAttempts -> RetryDelayMicros -> (a -> Bool) -> IO a -> IO a
+retryIO !attempts _ _ a | attempts <= 1 = a
 retryIO !attempts delay shouldRetry a = do
   res <- a
   if shouldRetry res
