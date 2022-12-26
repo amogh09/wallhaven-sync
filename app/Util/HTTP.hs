@@ -1,7 +1,7 @@
 module Util.HTTP (getURL, httpBSWithRetryAndErrorHandling) where
 
 import Control.Exception (tryJust)
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Except (MonadError, liftEither)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString (ByteString)
 import Network.HTTP.Client.Conduit (HttpExceptionContent (StatusCodeException), responseStatus)
@@ -28,7 +28,7 @@ httpBSWithRetryAndErrorHandling ::
   m ByteString
 httpBSWithRetryAndErrorHandling numRetries delay req =
   liftIO (httpBSWithRetry numRetries delay req)
-    >>= either throwError (pure . getResponseBody)
+    >>= fmap getResponseBody . liftEither
 
 httpBSWithRetry ::
   MaxAttempts ->

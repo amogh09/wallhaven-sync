@@ -1,7 +1,7 @@
 module Wallhaven.Favorites (Config (..), Error) where
 
 import Control.Exception (catchJust)
-import Control.Monad.Except (ExceptT, MonadError)
+import Control.Monad.Except (ExceptT, MonadError, modifyError)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (MonadReader (ask), ReaderT)
 import Data.ByteString (ByteString, writeFile)
@@ -55,6 +55,14 @@ data Config = Config
   }
 
 newtype App e m a = App {runApp :: ExceptT e (ReaderT Config m) a}
+  deriving
+    ( Functor,
+      Applicative,
+      Monad,
+      MonadError e,
+      MonadReader Config,
+      MonadIO
+    )
 
 type WallhavenApp = App Error IO
 
@@ -63,30 +71,42 @@ syncAllFavoriteWallpapers :: WallhavenApp ()
 syncAllFavoriteWallpapers = undefined
 
 getFavoritePreviews :: Page -> WallhavenApp [PreviewURL]
-getFavoritePreviews page = getFavoritesPage page >>= parseFavoritePreviews
+getFavoritePreviews page =
+  fmap BC8.unpack . parseFavoritePreviews <$> getFavoritesPage page
 
 getFavoritesPage :: Page -> WallhavenApp ByteString
-getFavoritesPage = undefined
+getFavoritesPage page =
+  favoritesRequestApp page >>= httpBSApp FavoritesFetchError
 
-favoritesRequest :: Page -> Request
-favoritesRequest = undefined
-
-parseFavoritePreviews :: ByteString -> [PreviewURL]
-parseFavoritePreviews = undefined
-
-httpBSApp :: Request -> WallhavenApp ByteString
-httpBSApp req = do
+favoritesRequestApp :: MonadReader Config m => Page -> m Request
+favoritesRequestApp page = do
   config <- ask
-  httpBSWithRetryAndErrorHandling
-    (configNumRetries config)
-    (seconds $ configRetryDelay config)
-    req
+  return $ favoritesRequest config page
 
--- favoritesRequest :: Config -> Int -> Request
--- favoritesRequest config page =
---   addRequestHeader "Cookie" (configCookie config)
---     . parseRequest_
---     $ "https://wallhaven.cc/favorites?page=" <> show page
+favoritesRequest :: Config -> Page -> Request
+favoritesRequest config page =
+  addRequestHeader "Cookie" (configCookie config)
+    . parseRequest_
+    $ "https://wallhaven.cc/favorites?page=" <> show page
+
+-- parseFavoritePreviews :: ByteString -> [PreviewURL]
+-- parseFavoritePreviews = undefined
+
+-- -- Extracts a list of favorites wallpapers from Wallhaven's favorites page
+parseFavoritePreviews :: (Show str, StringLike str) => str -> [str]
+parseFavoritePreviews =
+  fmap (fromAttrib "href")
+    . filter (~== ("<a class=\"preview\">" :: String))
+    . parseTags
+
+httpBSApp :: (HttpException -> Error) -> Request -> WallhavenApp ByteString
+httpBSApp errmap req = do
+  config <- ask
+  modifyError errmap $
+    httpBSWithRetryAndErrorHandling
+      (configNumRetries config)
+      (seconds $ configRetryDelay config)
+      req
 
 -- downloadAllFavoriteWallpapers :: Config -> IO [Error]
 -- downloadAllFavoriteWallpapers config = do
