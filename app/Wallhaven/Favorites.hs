@@ -1,17 +1,19 @@
-module Wallhaven.Favorites (Config (..), Error) where
+module Wallhaven.Favorites (Config (..), SyncError) where
 
 import Control.Exception (catchJust)
-import Control.Monad.Except (ExceptT, MonadError, modifyError)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (MonadReader (ask), ReaderT)
+import qualified Control.Monad.Catch as MC
+import Control.Monad.Except (ExceptT, MonadError, mapError, modifyError, throwError)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader (MonadReader (ask), ReaderT, reader)
 import Data.ByteString (ByteString, writeFile)
 import qualified Data.ByteString as B8
 import qualified Data.ByteString.Char8 as BC8
 import Data.List (find, isInfixOf)
+import Data.List.Split (splitOn)
 import Data.Maybe (catMaybes)
 import Data.String (IsString)
 import Network.HTTP.Client.Conduit (HttpException (HttpExceptionRequest), HttpExceptionContent)
-import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequest_)
+import Network.HTTP.Simple (Request, Response, addRequestHeader, getResponseBody, getResponseStatus, httpBS, parseRequest, parseRequestThrow, parseRequestThrow_, parseRequest_)
 import Network.HTTP.Types (tooManyRequests429)
 import Network.HTTP.Types.Status (ok200)
 import Retry (MaxAttempts, RetryDelayMicros, retryIO)
@@ -25,12 +27,22 @@ import Util.HTTP (httpBSWithRetryAndErrorHandling)
 import Util.Time (seconds)
 import Prelude hiding (writeFile)
 
-data Error
-  = FavoritesFetchError HttpException
+data SyncError
+  = FavoritesFetchError Page HttpException
+  | WallpaperSyncError [WallpaperError]
 
-type URL = String
+data WallpaperError
+  = PreviewFetchError WallpaperName HttpException
+  | FullWallpaperDownloadError WallpaperName HttpException
+  | FullWallpaperURLParseError WallpaperName FullWallpaperURL
 
-type PreviewURL = URL
+type FavoritePageURL = String
+
+type FullWallpaperURL = String
+
+type PreviewURL = String
+
+type WallpaperName = String
 
 type NumParallelDownloads = Int
 
@@ -64,24 +76,28 @@ newtype App e m a = App {runApp :: ExceptT e (ReaderT Config m) a}
       MonadIO
     )
 
-type WallhavenApp = App Error IO
+type WallhavenApp = App SyncError IO
 
 -- | Syncs all wallpapers from the Wallhaven favorites page.
 syncAllFavoriteWallpapers :: WallhavenApp ()
 syncAllFavoriteWallpapers = undefined
 
+-- downloadWallpapersFromPreviews :: [PreviewURL] -> m ()
+-- downloadWallpapersFromPreviews = do
+--   config <- ask
+--   processBatches (configNumParallelDownloads config) downloadWallpaperFromPreviewURL
+
 getFavoritePreviews :: Page -> WallhavenApp [PreviewURL]
 getFavoritePreviews page =
   fmap BC8.unpack . parseFavoritePreviews <$> getFavoritesPage page
 
-getFavoritesPage :: Page -> WallhavenApp ByteString
+getFavoritesPage ::
+  (MonadReader Config m, MonadError SyncError m, MonadIO m) => Page -> m ByteString
 getFavoritesPage page =
-  favoritesRequestApp page >>= httpBSApp FavoritesFetchError
+  favoritesRequestReader page >>= httpBSApp (FavoritesFetchError page)
 
-favoritesRequestApp :: MonadReader Config m => Page -> m Request
-favoritesRequestApp page = do
-  config <- ask
-  return $ favoritesRequest config page
+favoritesRequestReader :: MonadReader Config m => Page -> m Request
+favoritesRequestReader page = reader (`favoritesRequest` page)
 
 favoritesRequest :: Config -> Page -> Request
 favoritesRequest config page =
@@ -89,17 +105,18 @@ favoritesRequest config page =
     . parseRequest_
     $ "https://wallhaven.cc/favorites?page=" <> show page
 
--- parseFavoritePreviews :: ByteString -> [PreviewURL]
--- parseFavoritePreviews = undefined
-
--- -- Extracts a list of favorites wallpapers from Wallhaven's favorites page
+-- Extracts a list of favorites wallpapers from Wallhaven's favorites page.
 parseFavoritePreviews :: (Show str, StringLike str) => str -> [str]
 parseFavoritePreviews =
   fmap (fromAttrib "href")
     . filter (~== ("<a class=\"preview\">" :: String))
     . parseTags
 
-httpBSApp :: (HttpException -> Error) -> Request -> WallhavenApp ByteString
+httpBSApp ::
+  (MonadError e m, MonadReader Config m, MonadIO m) =>
+  (HttpException -> e) ->
+  Request ->
+  m ByteString
 httpBSApp errmap req = do
   config <- ask
   modifyError errmap $
@@ -107,6 +124,41 @@ httpBSApp errmap req = do
       (configNumRetries config)
       (seconds $ configRetryDelay config)
       req
+
+-- Parses full wallpaper link from a preview page.
+parseFullWallpaperURL :: (Show str, StringLike str) => str -> Maybe str
+parseFullWallpaperURL =
+  fmap (fromAttrib "href")
+    . find (~== ("<a class=\"full\" href=\"#\">" :: String))
+    . parseTags
+
+downloadWallpaperFromFullURL ::
+  (MonadError WallpaperError m, MonadReader Config m, MonadIO m) =>
+  FullWallpaperURL ->
+  m ()
+downloadWallpaperFromFullURL url = do
+  let name = wallpaperNameFromURL url
+  path <- wallpaperPathFromURL name
+  contents <- httpBSApp (FullWallpaperDownloadError name) (parseRequest_ url)
+  liftIO $ B8.writeFile path contents
+
+wallpaperNameFromURL :: FullWallpaperURL -> WallpaperName
+wallpaperNameFromURL fullWallpaperURL = last $ splitOn "/" fullWallpaperURL
+
+wallpaperPathFromURL :: MonadReader Config m => WallpaperName -> m FilePath
+wallpaperPathFromURL name =
+  reader (\config -> configWallpaperDir config </> name)
+
+downloadWallpaperFromPreviewURL ::
+  (MonadError WallpaperError m, MonadReader Config m, MonadIO m) =>
+  PreviewURL ->
+  m ()
+downloadWallpaperFromPreviewURL previewURL = do
+  let name = wallpaperNameFromURL previewURL
+  httpBSApp (PreviewFetchError name) (parseRequestThrow_ previewURL)
+    >>= maybe (throwError $ FullWallpaperURLParseError name previewURL) pure
+      . parseFullWallpaperURL
+    >>= downloadWallpaperFromFullURL . BC8.unpack
 
 -- downloadAllFavoriteWallpapers :: Config -> IO [Error]
 -- downloadAllFavoriteWallpapers config = do
@@ -126,7 +178,7 @@ httpBSApp errmap req = do
 --       if null previewURLs
 --         then return []
 --         else
---           (<>)
+--           _
 --             <$> batchedDownload previewURLs
 --             <*> downloadFavWallpapersFromPage config localWallpapers (page + 1)
 --   where
