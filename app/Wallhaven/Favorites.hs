@@ -66,14 +66,12 @@ instance HasAuthCookie Config where
 instance HasAuthCookie Env where
   getAuthCookie = getAuthCookie . getConfig
 
-data FullWallpaperURLParseException = FullWallpaperURLParseException String
+newtype FullWallpaperURLParseException = FullWallpaperURLParseException String
   deriving (Show, Typeable)
 
 instance Exception FullWallpaperURLParseException
 
 type URL = String
-
-type FavoritePageURL = URL
 
 type FullWallpaperURL = URL
 
@@ -144,8 +142,8 @@ parseFavoritePreviews =
 -- Parses full wallpaper link from a preview page.
 parseFullWallpaperURL :: (Show str, StringLike str) => str -> Maybe str
 parseFullWallpaperURL =
-  fmap (fromAttrib "href")
-    . find (~== ("<a class=\"full\" href=\"#\">" :: String))
+  fmap (fromAttrib "src")
+    . find (~== ("<img id=\"wallpaper\">" :: String))
     . parseTags
 
 syncWallpapers ::
@@ -182,43 +180,3 @@ downloadFullWallpaper url = do
   dir <- asks getWallpaperDir
   let name = wallpaperName url
   http2XXWithRetry (parseRequest_ url) >>= writeBinaryFile (dir <> "/" <> name)
-
--- downloadWallpaperFromFullURL ::
---   (MonadReader Config m, MonadIO m) =>
---   FullWallpaperURL ->
---   m ()
--- downloadWallpaperFromFullURL url = do
---   let name = wallpaperNameFromURL url
---   path <- wallpaperPathFromURL name
---   contents <- httpBSApp (FullWallpaperDownloadError name) (parseRequest_ url)
---   liftIO $ B8.writeFile path contents
-
--- wallpaperNameFromURL :: FullWallpaperURL -> WallpaperName
--- wallpaperNameFromURL fullWallpaperURL = last $ splitOn "/" fullWallpaperURL
-
--- wallpaperPathFromURL :: MonadReader Config m => WallpaperName -> m FilePath
--- wallpaperPathFromURL name =
---   reader (\config -> configWallpaperDir config </> name)
-
--- downloadWallpaperFromPreviewURL ::
---   (MonadError WallpaperError m, MonadReader Config m, MonadIO m) =>
---   PreviewURL ->
---   m ()
--- downloadWallpaperFromPreviewURL previewURL = do
---   let name = wallpaperNameFromURL previewURL
---   httpBSApp (PreviewFetchError name) (parseRequestThrow_ previewURL)
---     >>= maybe (throwError $ FullWallpaperURLParseError name previewURL) pure
---       . parseFullWallpaperURL
---     >>= downloadWallpaperFromFullURL . BC8.unpack
-
--- downloadWallpapersInBatches ::
---   Config -> [PreviewURL] -> IO [Either WallpaperError ()]
--- downloadWallpapersInBatches config =
---   fmap join
---     . mapM (downloadWallpaperBatchIO config)
---     . batches (configNumParallelDownloads config)
-
--- downloadWallpaperBatchIO ::
---   Config -> [PreviewURL] -> IO [Either WallpaperError ()]
--- downloadWallpaperBatchIO config =
---   mapConcurrently (runApp config . downloadWallpaperFromPreviewURL)
