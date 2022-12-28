@@ -1,10 +1,10 @@
-module Util.HTTP (getURL, httpBSWithRetryAndErrorHandling) where
+module Util.HTTP (http2XXWithRetry) where
 
-import Control.Exception (tryJust)
-import Control.Monad.Except (MonadError, liftEither)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Exception.Safe (MonadCatch, MonadThrow, throwM, try)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Reader (MonadReader)
 import Data.ByteString (ByteString)
-import Network.HTTP.Client.Conduit (HttpExceptionContent (StatusCodeException), responseStatus)
+import Network.HTTP.Client.Conduit (HttpExceptionContent (StatusCodeException), responseStatus, setRequestCheckStatus)
 import Network.HTTP.Simple
   ( HttpException (..),
     Request,
@@ -13,37 +13,26 @@ import Network.HTTP.Simple
     httpBS,
   )
 import Network.HTTP.Types (Status, tooManyRequests429)
-import Retry (MaxAttempts, RetryDelayMicros, retryIO)
+import Retry (HasRetryConfig, retryIO)
 
-getURL :: Request -> IO ByteString
-getURL url = getResponseBody <$> httpBS url
-
--- Performs an HTTP request with retries and catches HTTP exceptions
--- and turns them into errors.
-httpBSWithRetryAndErrorHandling ::
-  (MonadIO m, MonadError HttpException m) =>
-  MaxAttempts ->
-  RetryDelayMicros ->
+http2XXWithRetry ::
+  (MonadThrow m, MonadIO m, MonadReader env m, HasRetryConfig env, MonadCatch m) =>
   Request ->
   m ByteString
-httpBSWithRetryAndErrorHandling numRetries delay req =
-  liftIO (httpBSWithRetry numRetries delay req)
-    >>= fmap getResponseBody . liftEither
-
-httpBSWithRetry ::
-  MaxAttempts ->
-  RetryDelayMicros ->
-  Request ->
-  IO (Either HttpException (Response ByteString))
-httpBSWithRetry attempts delay =
-  retryIO attempts delay retryable
-    . tryJust (Just @HttpException)
-    . httpBS
+http2XXWithRetry req = do
+  res <-
+    retryIO retryable
+      . try
+      . httpBS
+      . setRequestCheckStatus
+      $ req
+  case res of
+    Left e -> throwM e
+    Right r -> pure $ getResponseBody r
   where
     retryable :: Either HttpException (Response ByteString) -> Bool
     retryable (Left (HttpExceptionRequest _ (StatusCodeException response _))) =
       isRetryableStatus (responseStatus response)
-    retryable (Right response) = isRetryableStatus (responseStatus response)
     retryable _ = False
 
     isRetryableStatus :: Status -> Bool

@@ -1,32 +1,23 @@
 module Wallhaven.CLI (runCLIApp) where
 
-import Control.Exception (catchJust)
+import Control.Monad.Reader (ReaderT (runReaderT))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import Options.Applicative
-import System.Environment (getEnv)
-import System.IO.Error (isDoesNotExistError)
-import Text.Printf (printf)
-import Wallhaven.Favorites (Config (Config, configWallpaperDir), Error, downloadAllFavoriteWallpapers)
+import Retry (RetryConfig (RetryConfig))
+import UnliftIO (MonadIO)
+import UnliftIO.Environment (getEnv)
+import Wallhaven.Favorites (Config (Config), Env (..), getFavoritePreviews)
 
 wallhavenCookieEnvVarName :: String
 wallhavenCookieEnvVarName = "WALLHAVEN_COOKIE"
-
-errorWallhavenCookieNotSet :: String
-errorWallhavenCookieNotSet = wallhavenCookieEnvVarName <> " cookie not set"
 
 defaultWallpaperDir :: FilePath
 defaultWallpaperDir = "/Users/home/wallpapers"
 
 -- Load cookie from environment variable.
-loadCookieFromEnv :: IO (Either Error ByteString)
-loadCookieFromEnv =
-  catchJust
-    doesNotExistErr
-    (pure . BC8.pack <$> getEnv wallhavenCookieEnvVarName)
-    (const $ pure $ Left errorWallhavenCookieNotSet)
-  where
-    doesNotExistErr e = if isDoesNotExistError e then Just () else Nothing
+loadCookieFromEnv :: MonadIO m => m ByteString
+loadCookieFromEnv = BC8.pack <$> getEnv wallhavenCookieEnvVarName
 
 data CLIOpts = CLIOpts
   { cliOptsWallpaperDir :: FilePath,
@@ -76,26 +67,16 @@ cliOptsToConfig opts =
   Config
     (cliOptsWallpaperDir opts)
     (cliOptsNumParallelDownloads opts)
-    (cliOptsNumRetries opts)
-    (cliOptsRetryDelay opts)
+    (RetryConfig (cliOptsNumRetries opts) (cliOptsRetryDelay opts))
 
 runCLIApp :: IO ()
 runCLIApp = do
   cliOpts <- execParser opts
   cookie <- loadCookieFromEnv
-  let configOrErr = cliOptsToConfig cliOpts <$> cookie
-  case configOrErr of
-    Left err -> putStrLn err
-    Right config -> do
-      errors <- downloadAllFavoriteWallpapers config
-      if null errors
-        then
-          printf
-            "All wallpapers were synced successfully to %s\n"
-            (configWallpaperDir config)
-        else do
-          putStrLn "Failed to sync wallpapers due to errors:"
-          mapM_ putStrLn errors
+  let config = cliOptsToConfig cliOpts cookie
+      env = Env config
+  urls <- runReaderT (getFavoritePreviews 1) env
+  print urls
   where
     opts =
       info
