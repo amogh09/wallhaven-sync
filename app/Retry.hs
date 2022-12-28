@@ -1,9 +1,9 @@
 module Retry
-  ( retryIO,
+  ( retryM,
     MaxAttempts,
     RetryDelayMicros,
-    RetryConfig (..),
-    HasRetryConfig (..),
+    RetryConfig (RetryConfig),
+    HasRetryConfig,
     getRetryConfig,
   )
 where
@@ -27,9 +27,9 @@ class HasRetryConfig a where
 instance HasRetryConfig RetryConfig where
   getRetryConfig = id
 
-retryIO ::
+retryM ::
   (MonadIO m, MonadReader env m, HasRetryConfig env) => (a -> Bool) -> m a -> m a
-retryIO shouldRetry action = do
+retryM shouldRetry action = do
   config <- asks getRetryConfig
   helper (maxAttempts config) (retryDelayMicros config) shouldRetry action
 

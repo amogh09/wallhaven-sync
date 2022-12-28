@@ -1,18 +1,15 @@
-module Wallhaven.Favorites (Config (..), syncAllWallpapers, Env (..)) where
+module Wallhaven.Favorites (Config (..), SyncError, getFavoritePreviews, Env (..)) where
 
 import Control.Monad.Reader (MonadReader, asks)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import Data.List (find)
-import Data.List.Split (splitOn)
-import Data.Typeable (Typeable)
+import Network.HTTP.Conduit (HttpException)
 import Network.HTTP.Simple (Request, addRequestHeader, parseRequest_)
 import Retry (HasRetryConfig, RetryConfig, getRetryConfig)
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.StringLike (StringLike)
-import UnliftIO (Exception, MonadIO, MonadUnliftIO, throwIO)
-import UnliftIO.Directory (listDirectory)
-import UnliftIO.IO.File (writeBinaryFile)
+import UnliftIO (MonadUnliftIO)
 import Util.HTTP (http2XXWithRetry)
 import Prelude hiding (writeFile)
 
@@ -29,15 +26,6 @@ data Config = Config
     -- | Cookie to use for authentication.
     configCookie :: AuthCookie
   }
-
-class HasWallpaperDir a where
-  getWallpaperDir :: a -> FilePath
-
-instance HasWallpaperDir Config where
-  getWallpaperDir = configWallpaperDir
-
-instance HasWallpaperDir Env where
-  getWallpaperDir = getWallpaperDir . envConfig
 
 instance HasRetryConfig Config where
   getRetryConfig = configRetryConfig
@@ -66,16 +54,12 @@ instance HasAuthCookie Config where
 instance HasAuthCookie Env where
   getAuthCookie = getAuthCookie . getConfig
 
-data FullWallpaperURLParseException = FullWallpaperURLParseException String
-  deriving (Show, Typeable)
+data SyncError
+  = FavoritesFetchError Page HttpException
 
-instance Exception FullWallpaperURLParseException
+type FavoritePageURL = String
 
-type URL = String
-
-type FavoritePageURL = URL
-
-type FullWallpaperURL = URL
+type FullWallpaperURL = String
 
 type PreviewURL = String
 
@@ -87,26 +71,11 @@ type AuthCookie = ByteString
 
 type Page = Int
 
-syncAllWallpapers ::
-  ( MonadReader env m,
-    MonadUnliftIO m,
-    MonadIO m,
-    HasWallpaperDir env,
-    HasAuthCookie env,
-    HasRetryConfig env
-  ) =>
-  m ()
-syncAllWallpapers = do
-  localWallpapers <- getLocalWallpapers
-  getFavoritePreviews 1 >>= syncWallpapers localWallpapers
-
-getLocalWallpapers ::
-  (MonadReader env m, HasWallpaperDir env, MonadIO m) =>
-  m [FilePath]
-getLocalWallpapers = asks getWallpaperDir >>= listDirectory
+type RetryDelaySeconds = Int
 
 getFavoritePreviews ::
   ( MonadReader env m,
+    HasConfig env,
     HasRetryConfig env,
     HasAuthCookie env,
     MonadUnliftIO m
@@ -118,6 +87,7 @@ getFavoritePreviews page =
 
 getFavoritesPage ::
   ( MonadReader env m,
+    HasConfig env,
     HasRetryConfig env,
     HasAuthCookie env,
     MonadUnliftIO m
@@ -148,40 +118,11 @@ parseFullWallpaperURL =
     . find (~== ("<a class=\"full\" href=\"#\">" :: String))
     . parseTags
 
-syncWallpapers ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env) =>
-  [FilePath] ->
-  [PreviewURL] ->
-  m ()
-syncWallpapers localWallpapers = mapM_ (syncWallpaper localWallpapers)
+syncWallpapers :: [FilePath] -> [PreviewURL] -> m ()
+syncWallpapers = undefined
 
-syncWallpaper ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env) =>
-  [FilePath] ->
-  PreviewURL ->
-  m ()
-syncWallpaper localWallpapers url = do
-  let name = wallpaperName url
-  if name `elem` localWallpapers
-    then pure ()
-    else
-      http2XXWithRetry (parseRequest_ url)
-        >>= maybe
-          (throwIO $ FullWallpaperURLParseException name)
-          (downloadFullWallpaper . BC8.unpack)
-          . parseFullWallpaperURL
-
-wallpaperName :: URL -> WallpaperName
-wallpaperName = last . splitOn "/"
-
-downloadFullWallpaper ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env) =>
-  FullWallpaperURL ->
-  m ()
-downloadFullWallpaper url = do
-  dir <- asks getWallpaperDir
-  let name = wallpaperName url
-  http2XXWithRetry (parseRequest_ url) >>= writeBinaryFile (dir <> "/" <> name)
+syncWallpaper :: PreviewURL -> m ()
+syncWallpaper = undefined
 
 -- downloadWallpaperFromFullURL ::
 --   (MonadReader Config m, MonadIO m) =>

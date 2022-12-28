@@ -7,7 +7,7 @@ import Options.Applicative
 import Retry (RetryConfig (RetryConfig))
 import UnliftIO (MonadIO)
 import UnliftIO.Environment (getEnv)
-import Wallhaven.Favorites (Config (Config), Env (..), getFavoritePreviews)
+import Wallhaven.Favorites (Config (Config), Env (..), syncAllWallpapers)
 
 wallhavenCookieEnvVarName :: String
 wallhavenCookieEnvVarName = "WALLHAVEN_COOKIE"
@@ -75,8 +75,8 @@ runCLIApp = do
   cookie <- loadCookieFromEnv
   let config = cliOptsToConfig cliOpts cookie
       env = Env config
-  urls <- runReaderT (getFavoritePreviews 1) env
-  print urls
+  runReaderT syncAllWallpapers env
+  putStrLn "Sync finished"
   where
     opts =
       info

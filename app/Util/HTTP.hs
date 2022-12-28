@@ -1,10 +1,12 @@
 module Util.HTTP (http2XXWithRetry) where
 
-import Control.Exception.Safe (MonadCatch, MonadThrow, throwM, try)
-import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (MonadReader)
 import Data.ByteString (ByteString)
-import Network.HTTP.Client.Conduit (HttpExceptionContent (StatusCodeException), responseStatus, setRequestCheckStatus)
+import Network.HTTP.Client.Conduit
+  ( HttpExceptionContent (StatusCodeException),
+    responseStatus,
+    setRequestCheckStatus,
+  )
 import Network.HTTP.Simple
   ( HttpException (..),
     Request,
@@ -13,21 +15,23 @@ import Network.HTTP.Simple
     httpBS,
   )
 import Network.HTTP.Types (Status, tooManyRequests429)
-import Retry (HasRetryConfig, retryIO)
+import Retry (HasRetryConfig, retryM)
+import UnliftIO (MonadUnliftIO)
+import UnliftIO.Exception (throwIO, try)
 
 http2XXWithRetry ::
-  (MonadThrow m, MonadIO m, MonadReader env m, HasRetryConfig env, MonadCatch m) =>
+  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env) =>
   Request ->
   m ByteString
 http2XXWithRetry req = do
   res <-
-    retryIO retryable
+    retryM retryable
       . try
       . httpBS
       . setRequestCheckStatus
       $ req
   case res of
-    Left e -> throwM e
+    Left e -> throwIO e
     Right r -> pure $ getResponseBody r
   where
     retryable :: Either HttpException (Response ByteString) -> Bool
