@@ -21,7 +21,7 @@ import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (throwIO, try)
 
 http2XXWithRetry ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env) =>
+  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasLog env) =>
   Request ->
   m ByteString
 http2XXWithRetry req = do

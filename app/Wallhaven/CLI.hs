@@ -7,6 +7,7 @@ import Options.Applicative
 import Types
 import UnliftIO (MonadIO)
 import UnliftIO.Environment (getEnv)
+import Util.Time (seconds)
 import Wallhaven.Favorites (syncAllWallpapers)
 
 wallhavenCookieEnvVarName :: String
@@ -67,7 +68,7 @@ cliOptsToConfig opts =
   Config
     (cliOptsWallpaperDir opts)
     (cliOptsNumParallelDownloads opts)
-    (RetryConfig (cliOptsNumRetries opts) (cliOptsRetryDelay opts))
+    (RetryConfig (cliOptsNumRetries opts) (seconds $ cliOptsRetryDelay opts))
 
 runCLIApp :: IO ()
 runCLIApp = do

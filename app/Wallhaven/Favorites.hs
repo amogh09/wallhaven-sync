@@ -39,7 +39,8 @@ getFavoritePreviews ::
   ( MonadReader env m,
     HasRetryConfig env,
     HasAuthCookie env,
-    MonadUnliftIO m
+    MonadUnliftIO m,
+    HasLog env
   ) =>
   Page ->
   m [PreviewURL]
@@ -50,7 +51,8 @@ getFavoritesPage ::
   ( MonadReader env m,
     HasRetryConfig env,
     HasAuthCookie env,
-    MonadUnliftIO m
+    MonadUnliftIO m,
+    HasLog env
   ) =>
   Page ->
   m ByteString
