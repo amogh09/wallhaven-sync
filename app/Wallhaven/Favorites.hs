@@ -67,14 +67,14 @@ syncAllWallpapers ::
 syncAllWallpapers = do
   asks getWallpaperDir >>= createDirectoryIfMissing True
   localWallpapers <- getLocalWallpapers
-  getFavoritePreviews 1 >>= syncWallpapers localWallpapers
+  getFavoritePreviewsStartingPage 1 >>= syncWallpapers localWallpapers
 
 getLocalWallpapers ::
   (MonadReader env m, HasWallpaperDir env, MonadIO m) =>
   m [FilePath]
 getLocalWallpapers = asks getWallpaperDir >>= listDirectory
 
-getFavoritePreviews ::
+getFavoritePreviewsStartingPage ::
   ( MonadReader env m,
     HasRetryConfig env,
     HasAuthCookie env,
@@ -83,8 +83,12 @@ getFavoritePreviews ::
   ) =>
   Page ->
   m [PreviewURL]
-getFavoritePreviews page =
-  fmap BC8.unpack . parseFavoritePreviews <$> getFavoritesPage page
+getFavoritePreviewsStartingPage page = do
+  urls <- fmap BC8.unpack . parseFavoritePreviews <$> getFavoritesPage page
+  if null urls
+    then pure []
+    else do
+      (<> urls) <$> getFavoritePreviewsStartingPage (page + 1)
 
 getFavoritesPage ::
   ( MonadReader env m,
