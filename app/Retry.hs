@@ -1,31 +1,12 @@
 module Retry
   ( retryM,
-    MaxAttempts,
-    RetryDelayMicros,
-    RetryConfig (RetryConfig),
-    HasRetryConfig,
-    getRetryConfig,
   )
 where
 
 import Control.Monad.Reader (MonadReader, asks)
+import Types
 import UnliftIO (MonadIO)
 import UnliftIO.Concurrent (threadDelay)
-
-type MaxAttempts = Int
-
-type RetryDelayMicros = Int
-
-data RetryConfig = RetryConfig
-  { maxAttempts :: MaxAttempts,
-    retryDelayMicros :: RetryDelayMicros
-  }
-
-class HasRetryConfig a where
-  getRetryConfig :: a -> RetryConfig
-
-instance HasRetryConfig RetryConfig where
-  getRetryConfig = id
 
 retryM ::
   (MonadIO m, MonadReader env m, HasRetryConfig env) => (a -> Bool) -> m a -> m a

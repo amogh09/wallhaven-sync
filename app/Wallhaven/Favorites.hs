@@ -5,85 +5,15 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import Data.List (find)
 import Data.List.Split (splitOn)
-import Data.Typeable (Typeable)
 import Network.HTTP.Simple (Request, addRequestHeader, parseRequest_)
-import Retry (HasRetryConfig, RetryConfig, getRetryConfig)
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.StringLike (StringLike)
-import UnliftIO (Exception, MonadIO, MonadUnliftIO, throwIO)
+import Types
+import UnliftIO (MonadIO, MonadUnliftIO, throwIO)
 import UnliftIO.Directory (listDirectory)
 import UnliftIO.IO.File (writeBinaryFile)
 import Util.HTTP (http2XXWithRetry)
-import Prelude hiding (writeFile)
-
-newtype Env = Env {envConfig :: Config}
-
--- Configuration structure.
-data Config = Config
-  { -- | The directory where the wallpapers will be saved.
-    configWallpaperDir :: FilePath,
-    -- | The number of wallpapers to download in parallel.
-    configNumParallelDownloads :: NumParallelDownloads,
-    -- | Retry config for HTTP requests.
-    configRetryConfig :: RetryConfig,
-    -- | Cookie to use for authentication.
-    configCookie :: AuthCookie
-  }
-
-class HasWallpaperDir a where
-  getWallpaperDir :: a -> FilePath
-
-instance HasWallpaperDir Config where
-  getWallpaperDir = configWallpaperDir
-
-instance HasWallpaperDir Env where
-  getWallpaperDir = getWallpaperDir . envConfig
-
-instance HasRetryConfig Config where
-  getRetryConfig = configRetryConfig
-
-instance HasRetryConfig Env where
-  getRetryConfig = getRetryConfig . envConfig
-
-class HasConfig a where
-  getConfig :: a -> Config
-
-instance HasConfig Config where
-  getConfig = id
-
-instance HasConfig Env where
-  getConfig = envConfig
-
-class HasAuthCookie a where
-  getAuthCookie :: a -> AuthCookie
-
-instance HasAuthCookie AuthCookie where
-  getAuthCookie = id
-
-instance HasAuthCookie Config where
-  getAuthCookie = configCookie
-
-instance HasAuthCookie Env where
-  getAuthCookie = getAuthCookie . getConfig
-
-newtype FullWallpaperURLParseException = FullWallpaperURLParseException String
-  deriving (Show, Typeable)
-
-instance Exception FullWallpaperURLParseException
-
-type URL = String
-
-type FullWallpaperURL = URL
-
-type PreviewURL = String
-
-type WallpaperName = String
-
-type NumParallelDownloads = Int
-
-type AuthCookie = ByteString
-
-type Page = Int
+import Prelude hiding (log, writeFile)
 
 syncAllWallpapers ::
   ( MonadReader env m,
@@ -91,11 +21,13 @@ syncAllWallpapers ::
     MonadIO m,
     HasWallpaperDir env,
     HasAuthCookie env,
-    HasRetryConfig env
+    HasRetryConfig env,
+    HasLog env
   ) =>
   m ()
 syncAllWallpapers = do
   localWallpapers <- getLocalWallpapers
+  log $ "Local wallpapers: " <> show localWallpapers
   getFavoritePreviews 1 >>= syncWallpapers localWallpapers
 
 getLocalWallpapers ::
@@ -147,36 +79,48 @@ parseFullWallpaperURL =
     . parseTags
 
 syncWallpapers ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env) =>
+  ( MonadUnliftIO m,
+    MonadReader env m,
+    HasRetryConfig env,
+    HasWallpaperDir env,
+    HasLog env
+  ) =>
   [FilePath] ->
   [PreviewURL] ->
   m ()
 syncWallpapers localWallpapers = mapM_ (syncWallpaper localWallpapers)
 
 syncWallpaper ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env) =>
+  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env, HasLog env) =>
   [FilePath] ->
   PreviewURL ->
   m ()
 syncWallpaper localWallpapers url = do
   let name = wallpaperName url
-  if name `elem` localWallpapers
-    then pure ()
-    else
-      http2XXWithRetry (parseRequest_ url)
-        >>= maybe
-          (throwIO $ FullWallpaperURLParseException name)
-          (downloadFullWallpaper . BC8.unpack)
-          . parseFullWallpaperURL
+  http2XXWithRetry (parseRequest_ url)
+    >>= maybe
+      (throwIO $ FullWallpaperURLParseException name)
+      (downloadFullWallpaper localWallpapers . BC8.unpack)
+      . parseFullWallpaperURL
 
 wallpaperName :: URL -> WallpaperName
 wallpaperName = last . splitOn "/"
 
 downloadFullWallpaper ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env) =>
+  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env, HasLog env) =>
+  [FilePath] ->
   FullWallpaperURL ->
   m ()
-downloadFullWallpaper url = do
-  dir <- asks getWallpaperDir
+downloadFullWallpaper localWallpapers url = do
   let name = wallpaperName url
-  http2XXWithRetry (parseRequest_ url) >>= writeBinaryFile (dir <> "/" <> name)
+  log $ "Working on " <> name
+  if name `elem` localWallpapers
+    then log $ "Already downloaded " <> name
+    else do
+      log $ "Downloading " <> name
+      dir <- asks getWallpaperDir
+      let req = parseRequest_ $ fullWallpaperLink url
+      http2XXWithRetry req >>= writeBinaryFile (dir <> "/" <> name)
+  where
+    fullWallpaperLink :: String -> String
+    fullWallpaperLink relativePath = "https://w.wallhaven.cc" <> relativePath

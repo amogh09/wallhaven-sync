@@ -15,7 +15,8 @@ import Network.HTTP.Simple
     httpBS,
   )
 import Network.HTTP.Types (Status, tooManyRequests429)
-import Retry (HasRetryConfig, retryM)
+import Retry (retryM)
+import Types
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (throwIO, try)
 

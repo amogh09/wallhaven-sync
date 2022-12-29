@@ -4,10 +4,10 @@ import Control.Monad.Reader (ReaderT (runReaderT))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import Options.Applicative
-import Retry (RetryConfig (RetryConfig))
+import Types
 import UnliftIO (MonadIO)
 import UnliftIO.Environment (getEnv)
-import Wallhaven.Favorites (Config (Config), Env (..), syncAllWallpapers)
+import Wallhaven.Favorites (syncAllWallpapers)
 
 wallhavenCookieEnvVarName :: String
 wallhavenCookieEnvVarName = "WALLHAVEN_COOKIE"
@@ -74,7 +74,7 @@ runCLIApp = do
   cliOpts <- execParser opts
   cookie <- loadCookieFromEnv
   let config = cliOptsToConfig cliOpts cookie
-      env = Env config
+      env = Env config (putStrLn . ("[LOG] " <>))
   runReaderT syncAllWallpapers env
   putStrLn "Sync finished"
   where

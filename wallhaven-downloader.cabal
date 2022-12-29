@@ -28,6 +28,7 @@ executable wallhaven-sync
         Wallhaven.Favorites,
         Wallhaven.CLI,
         Retry,
+        Types,
         Util.Time,
         Util.List,
         Util.HTTP
