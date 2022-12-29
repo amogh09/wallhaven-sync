@@ -77,7 +77,6 @@ runCLIApp = do
   let config = cliOptsToConfig cliOpts cookie
       env = Env config putStr
   runReaderT syncAllWallpapers env
-  putStrLn "\nSync finished"
   where
     opts =
       info

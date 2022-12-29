@@ -52,4 +52,4 @@ executable wallhaven-sync
     default-language: Haskell2010
     extensions:       OverloadedStrings, BangPatterns, FlexibleContexts,
                       TypeApplications, GeneralizedNewtypeDeriving,
-                      FlexibleInstances
+                      FlexibleInstances, ScopedTypeVariables, TupleSections
