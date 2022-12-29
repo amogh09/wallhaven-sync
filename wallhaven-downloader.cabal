@@ -31,7 +31,8 @@ executable wallhaven-sync
         Types,
         Util.Time,
         Util.List,
-        Util.HTTP
+        Util.HTTP,
+        Util.Wallhaven
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -53,3 +54,15 @@ executable wallhaven-sync
     extensions:       OverloadedStrings, BangPatterns, FlexibleContexts,
                       TypeApplications, GeneralizedNewtypeDeriving,
                       FlexibleInstances, ScopedTypeVariables, TupleSections
+
+Test-Suite spec
+    type:               exitcode-stdio-1.0
+    main-is:            Spec.hs
+    other-modules:      Util.WallhavenSpec
+    hs-source-dirs:     test
+    ghc-options:        -Wall
+    build-depends:    
+        base ^>=4.16.3.0, 
+        hspec ^>=2.10.6
+        -- wallhaven-sync
+    build-tool-depends: hspec-discover:hspec-discover ^>=2.10.6

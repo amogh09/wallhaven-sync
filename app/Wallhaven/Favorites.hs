@@ -57,6 +57,15 @@ getFavoritePreviewsStartingPage page = do
     else do
       (<> urls) <$> getFavoritePreviewsStartingPage (page + 1)
 
+-- Deletes the local wallpapers that are not in the favorites anymore.
+deleteUnknownWallpapers :: MonadIO m => LocalWallpapers -> FavoritePreviews -> m ()
+deleteUnknownWallpapers localWallpapers favPreviews = do
+  let unknownWallpapers = filter notFavorite localWallpapers
+  mapM_ removeFile unknownWallpapers
+  where
+    notFavorite :: FilePath -> Bool
+    notFavorite localWallpaper = not . any (wallpaperName localWallpaper `isInfixOf`) $ favPreviews
+
 getFavoritesPage ::
   ( MonadReader env m,
     HasRetryConfig env,

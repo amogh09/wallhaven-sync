@@ -110,6 +110,10 @@ type AuthCookie = ByteString
 
 type Page = Int
 
+type LocalWallpapers = [FilePath]
+
+type FavoritePreviews = [PreviewURL]
+
 data WallpaperSyncException = WallpaperSyncException PreviewURL HTTP.HttpException
   deriving (Typeable, Show)
 
