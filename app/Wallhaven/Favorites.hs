@@ -1,5 +1,6 @@
 module Wallhaven.Favorites (Config (..), syncAllWallpapers, Env (..)) where
 
+import Control.Monad (foldM, unless)
 import Control.Monad.Reader (MonadReader, asks)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
@@ -9,10 +10,11 @@ import Network.HTTP.Simple (Request, addRequestHeader, parseRequest_)
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.StringLike (StringLike)
 import Types
-import UnliftIO (MonadIO, MonadUnliftIO, throwIO)
-import UnliftIO.Directory (listDirectory)
+import UnliftIO (MonadIO, MonadUnliftIO, mapConcurrently_, throwIO)
+import UnliftIO.Directory (createDirectoryIfMissing, listDirectory)
 import UnliftIO.IO.File (writeBinaryFile)
 import Util.HTTP (http2XXWithRetry)
+import Util.List (batches)
 import Prelude hiding (log, writeFile)
 
 syncAllWallpapers ::
@@ -22,12 +24,13 @@ syncAllWallpapers ::
     HasWallpaperDir env,
     HasAuthCookie env,
     HasRetryConfig env,
-    HasLog env
+    HasLog env,
+    HasNumParallelDownloads env
   ) =>
   m ()
 syncAllWallpapers = do
+  asks getWallpaperDir >>= createDirectoryIfMissing True
   localWallpapers <- getLocalWallpapers
-  log $ "Local wallpapers: " <> show localWallpapers
   getFavoritePreviews 1 >>= syncWallpapers localWallpapers
 
 getLocalWallpapers ::
@@ -85,41 +88,60 @@ syncWallpapers ::
     MonadReader env m,
     HasRetryConfig env,
     HasWallpaperDir env,
-    HasLog env
+    HasLog env,
+    HasNumParallelDownloads env
   ) =>
   [FilePath] ->
   [PreviewURL] ->
   m ()
-syncWallpapers localWallpapers = mapM_ (syncWallpaper localWallpapers)
+syncWallpapers localWallpapers urls = do
+  parallelDownloads <- asks getNumParallelDownloads
+  count <-
+    foldM
+      ( \count batch ->
+          mapConcurrently_ (syncWallpaper localWallpapers) batch
+            >> log ("Progress: [" <> show count <> "/" <> show (length urls) <> "]\r")
+            >> return (count + length batch)
+      )
+      0
+      (batches parallelDownloads urls)
+  log ("Progress: [" <> show count <> "/" <> show (length urls) <> "]\r")
 
 syncWallpaper ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env, HasLog env) =>
+  ( MonadUnliftIO m,
+    MonadReader env m,
+    HasRetryConfig env,
+    HasWallpaperDir env,
+    HasLog env
+  ) =>
   [FilePath] ->
   PreviewURL ->
   m ()
 syncWallpaper localWallpapers url = do
   let name = wallpaperName url
-  if any (isInfixOf name) localWallpapers
-    then log $ concat ["Skipping ", name, " as it is already synced."]
-    else
-      http2XXWithRetry (parseRequest_ url)
-        >>= maybe
-          (throwIO $ FullWallpaperURLParseException name)
-          (downloadFullWallpaper . BC8.unpack)
-          . parseFullWallpaperURL
+  unless (any (isInfixOf name) localWallpapers) $ do
+    http2XXWithRetry (parseRequest_ url)
+      >>= maybe
+        (throwIO $ FullWallpaperURLParseException name)
+        (downloadFullWallpaper . BC8.unpack)
+        . parseFullWallpaperURL
 
 wallpaperName :: URL -> WallpaperName
 wallpaperName = last . splitOn "/"
 
 downloadFullWallpaper ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env, HasLog env) =>
+  ( MonadUnliftIO m,
+    MonadReader env m,
+    HasRetryConfig env,
+    HasWallpaperDir env,
+    HasLog env
+  ) =>
   FullWallpaperURL ->
   m ()
 downloadFullWallpaper url = do
   dir <- asks getWallpaperDir
   let name = wallpaperName url
       req = parseRequest_ $ fullWallpaperLink url
-  log $ "Downloading " <> name
   http2XXWithRetry req >>= writeBinaryFile (dir <> "/" <> name)
   where
     fullWallpaperLink :: String -> String

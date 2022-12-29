@@ -2,7 +2,7 @@ module Types where
 
 import Control.Monad.Reader (MonadReader, asks, liftIO)
 import Data.ByteString (ByteString)
-import UnliftIO (Exception, MonadIO, Typeable)
+import UnliftIO (Exception, MonadIO, Typeable, hFlush, stdout)
 import Prelude hiding (log)
 
 type MaxAttempts = Int
@@ -42,6 +42,15 @@ class HasLog a where
 
 instance HasLog Env where
   getLog = envLog
+
+class HasNumParallelDownloads a where
+  getNumParallelDownloads :: a -> NumParallelDownloads
+
+instance HasNumParallelDownloads Config where
+  getNumParallelDownloads = configNumParallelDownloads
+
+instance HasNumParallelDownloads Env where
+  getNumParallelDownloads = getNumParallelDownloads . envConfig
 
 class HasWallpaperDir a where
   getWallpaperDir :: a -> FilePath
@@ -102,3 +111,4 @@ log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 log msg = do
   logger <- asks getLog
   liftIO $ logger msg
+  hFlush stdout

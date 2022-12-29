@@ -75,9 +75,9 @@ runCLIApp = do
   cliOpts <- execParser opts
   cookie <- loadCookieFromEnv
   let config = cliOptsToConfig cliOpts cookie
-      env = Env config (putStrLn . ("[LOG] " <>))
+      env = Env config putStr
   runReaderT syncAllWallpapers env
-  putStrLn "Sync finished"
+  putStrLn "\nSync finished"
   where
     opts =
       info
