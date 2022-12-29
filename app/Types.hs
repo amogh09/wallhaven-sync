@@ -125,7 +125,18 @@ instance Exception WallpaperSyncException where
         <> show (HTTP.statusCode status)
         <> " "
         <> BC8.unpack (HTTP.statusMessage status)
-  displayException e = displayException e
+  displayException
+    ( WallpaperSyncException
+        url
+        (HTTP.HttpExceptionRequest _ HTTP.ResponseTimeout)
+      ) = url <> ": " <> "Response timeout"
+  displayException
+    ( WallpaperSyncException
+        url
+        (HTTP.HttpExceptionRequest _ HTTP.ConnectionTimeout)
+      ) = url <> ": " <> "Connection timeout"
+  displayException (WallpaperSyncException url e) =
+    url <> ": " <> displayException e
 
 log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 log msg = do
