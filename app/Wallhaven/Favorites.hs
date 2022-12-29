@@ -1,6 +1,6 @@
 module Wallhaven.Favorites (Config (..), syncAllWallpapers, Env (..)) where
 
-import Control.Monad (foldM, unless)
+import Control.Monad (forever, unless)
 import Control.Monad.Reader (MonadReader, asks)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
@@ -10,7 +10,8 @@ import Network.HTTP.Simple (Request, addRequestHeader, parseRequest_)
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.StringLike (StringLike)
 import Types
-import UnliftIO (MonadIO, MonadUnliftIO, mapConcurrently_, throwIO)
+import UnliftIO (MVar, MonadIO, MonadUnliftIO, mapConcurrently_, modifyMVar_, newMVar, readMVar, throwIO, withAsync)
+import UnliftIO.Concurrent (threadDelay)
 import UnliftIO.Directory (createDirectoryIfMissing, listDirectory)
 import UnliftIO.IO.File (writeBinaryFile)
 import Util.HTTP (http2XXWithRetry)
@@ -96,16 +97,20 @@ syncWallpapers ::
   m ()
 syncWallpapers localWallpapers urls = do
   parallelDownloads <- asks getNumParallelDownloads
-  count <-
-    foldM
-      ( \count batch ->
-          mapConcurrently_ (syncWallpaper localWallpapers) batch
-            >> log ("Progress: [" <> show count <> "/" <> show (length urls) <> "]\r")
-            >> return (count + length batch)
-      )
-      0
-      (batches parallelDownloads urls)
-  log ("Progress: [" <> show count <> "/" <> show (length urls) <> "]\r")
+  progressVar <- newMVar 0
+  withAsync
+    (forever $ printProgressBar progressVar (length urls) >> threadDelay 1000000)
+    ( const
+        . mapM_ (mapConcurrently_ (syncWallpaper localWallpapers progressVar))
+        $ batches parallelDownloads urls
+    )
+  printProgressBar progressVar (length urls)
+
+printProgressBar ::
+  (MonadIO m, MonadReader env m, HasLog env) => MVar Int -> Int -> m ()
+printProgressBar var total = do
+  doneCount <- readMVar var
+  log ("Progress: [" <> show doneCount <> "/" <> show total <> "]\r")
 
 syncWallpaper ::
   ( MonadUnliftIO m,
@@ -115,9 +120,10 @@ syncWallpaper ::
     HasLog env
   ) =>
   [FilePath] ->
+  MVar Int ->
   PreviewURL ->
   m ()
-syncWallpaper localWallpapers url = do
+syncWallpaper localWallpapers progressVar url = do
   let name = wallpaperName url
   unless (any (isInfixOf name) localWallpapers) $ do
     http2XXWithRetry (parseRequest_ url)
@@ -125,6 +131,7 @@ syncWallpaper localWallpapers url = do
         (throwIO $ FullWallpaperURLParseException name)
         (downloadFullWallpaper . BC8.unpack)
         . parseFullWallpaperURL
+  modifyMVar_ progressVar (return . (+ 1))
 
 wallpaperName :: URL -> WallpaperName
 wallpaperName = last . splitOn "/"
