@@ -3,7 +3,7 @@ module Wallhaven.Favorites (Config (..), syncAllWallpapers, Env (..)) where
 import Control.Monad.Reader (MonadReader, asks)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
-import Data.List (find)
+import Data.List (find, isInfixOf)
 import Data.List.Split (splitOn)
 import Network.HTTP.Simple (Request, addRequestHeader, parseRequest_)
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
@@ -99,30 +99,28 @@ syncWallpaper ::
   m ()
 syncWallpaper localWallpapers url = do
   let name = wallpaperName url
-  http2XXWithRetry (parseRequest_ url)
-    >>= maybe
-      (throwIO $ FullWallpaperURLParseException name)
-      (downloadFullWallpaper localWallpapers . BC8.unpack)
-      . parseFullWallpaperURL
+  if any (isInfixOf name) localWallpapers
+    then log $ concat ["Skipping ", name, " as it is already synced."]
+    else
+      http2XXWithRetry (parseRequest_ url)
+        >>= maybe
+          (throwIO $ FullWallpaperURLParseException name)
+          (downloadFullWallpaper . BC8.unpack)
+          . parseFullWallpaperURL
 
 wallpaperName :: URL -> WallpaperName
 wallpaperName = last . splitOn "/"
 
 downloadFullWallpaper ::
   (MonadUnliftIO m, MonadReader env m, HasRetryConfig env, HasWallpaperDir env, HasLog env) =>
-  [FilePath] ->
   FullWallpaperURL ->
   m ()
-downloadFullWallpaper localWallpapers url = do
+downloadFullWallpaper url = do
+  dir <- asks getWallpaperDir
   let name = wallpaperName url
-  log $ "Working on " <> name
-  if name `elem` localWallpapers
-    then log $ "Already downloaded " <> name
-    else do
-      log $ "Downloading " <> name
-      dir <- asks getWallpaperDir
-      let req = parseRequest_ $ fullWallpaperLink url
-      http2XXWithRetry req >>= writeBinaryFile (dir <> "/" <> name)
+      req = parseRequest_ $ fullWallpaperLink url
+  log $ "Downloading " <> name
+  http2XXWithRetry req >>= writeBinaryFile (dir <> "/" <> name)
   where
     fullWallpaperLink :: String -> String
     fullWallpaperLink relativePath = "https://w.wallhaven.cc" <> relativePath
