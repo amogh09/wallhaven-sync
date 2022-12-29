@@ -102,7 +102,7 @@ syncWallpapers ::
   [PreviewURL] ->
   m ()
 syncWallpapers localWallpapers urls = do
-  progressVar <- newMVar 0
+  progressVar <- newMVar 0 -- to be updated by threads downloading individual wallpapers.
   results <-
     withAsync
       (forever $ printProgressBar progressVar (length urls) >> threadDelay 100000)
@@ -181,8 +181,5 @@ downloadFullWallpaper ::
 downloadFullWallpaper url = do
   dir <- asks getWallpaperDir
   let name = wallpaperName url
-      req = HTTP.parseRequest_ $ fullWallpaperLink url
+      req = HTTP.parseRequest_ $ "https://w.wallhaven.cc" <> url
   http2XXWithRetry req >>= writeBinaryFile (dir <> "/" <> name)
-  where
-    fullWallpaperLink :: String -> String
-    fullWallpaperLink relativePath = "https://w.wallhaven.cc" <> relativePath
