@@ -8,50 +8,17 @@ import qualified Data.ByteString.Char8 as BC8
 import Data.Either (lefts)
 import Data.List (find, isInfixOf)
 import Data.List.Split (splitOn)
-import Network.HTTP.Conduit (HttpExceptionContent (StatusCodeException), responseStatus)
-import Network.HTTP.Simple (HttpException (HttpExceptionRequest), Request, addRequestHeader, parseRequest_)
-import Network.HTTP.Types (Status (statusCode), statusMessage)
+import qualified Network.HTTP.Simple as HTTP
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.StringLike (StringLike)
 import Types
 import UnliftIO
-  ( Exception,
-    MVar,
-    MonadIO,
-    MonadUnliftIO,
-    Typeable,
-    displayException,
-    mapConcurrently,
-    modifyMVar_,
-    newMVar,
-    readMVar,
-    throwIO,
-    try,
-    withAsync,
-  )
-import UnliftIO.Concurrent (threadDelay)
-import UnliftIO.Directory (createDirectoryIfMissing, listDirectory)
-import UnliftIO.IO.File (writeBinaryFile)
+import UnliftIO.Concurrent
+import UnliftIO.Directory
+import UnliftIO.IO.File
 import Util.HTTP (http2XXWithRetry)
 import Util.List (batches)
 import Prelude hiding (log, writeFile)
-
-data WallpaperSyncException = WallpaperSyncException PreviewURL HttpException
-  deriving (Typeable, Show)
-
-instance Exception WallpaperSyncException where
-  displayException
-    ( WallpaperSyncException
-        url
-        (HttpExceptionRequest _ (StatusCodeException resp _))
-      ) = do
-      let status = responseStatus resp
-      url
-        <> ": "
-        <> show (statusCode status)
-        <> " "
-        <> BC8.unpack (statusMessage status)
-  displayException e = displayException e
 
 syncAllWallpapers ::
   ( MonadReader env m,
@@ -101,12 +68,12 @@ getFavoritesPage ::
   m ByteString
 getFavoritesPage page = favoritesRequest page >>= http2XXWithRetry
 
-favoritesRequest :: (MonadReader env m, HasAuthCookie env) => Page -> m Request
+favoritesRequest :: (MonadReader env m, HasAuthCookie env) => Page -> m HTTP.Request
 favoritesRequest page = do
   cookie <- asks getAuthCookie
   return
-    . addRequestHeader "Cookie" cookie
-    . parseRequest_
+    . HTTP.addRequestHeader "Cookie" cookie
+    . HTTP.parseRequest_
     $ "https://wallhaven.cc/favorites?page=" <> show page
 
 -- Extracts a list of favorites wallpapers from Wallhaven's favorites page.
@@ -165,7 +132,7 @@ syncWallpapersInBatches ::
   [FilePath] ->
   MVar Int ->
   [PreviewURL] ->
-  m [Either HttpException ()]
+  m [Either HTTP.HttpException ()]
 syncWallpapersInBatches localWallpapers progressVar urls = do
   parallelDownloads <- asks getNumParallelDownloads
   fmap concat
@@ -192,7 +159,7 @@ syncWallpaper ::
 syncWallpaper localWallpapers progressVar url = do
   let name = wallpaperName url
   unless (any (isInfixOf name) localWallpapers) $ do
-    http2XXWithRetry (parseRequest_ url)
+    http2XXWithRetry (HTTP.parseRequest_ url)
       >>= maybe
         (throwIO $ FullWallpaperURLParseException name)
         (downloadFullWallpaper . BC8.unpack)
@@ -214,7 +181,7 @@ downloadFullWallpaper ::
 downloadFullWallpaper url = do
   dir <- asks getWallpaperDir
   let name = wallpaperName url
-      req = parseRequest_ $ fullWallpaperLink url
+      req = HTTP.parseRequest_ $ fullWallpaperLink url
   http2XXWithRetry req >>= writeBinaryFile (dir <> "/" <> name)
   where
     fullWallpaperLink :: String -> String

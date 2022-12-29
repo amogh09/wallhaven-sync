@@ -2,7 +2,10 @@ module Types where
 
 import Control.Monad.Reader (MonadReader, asks, liftIO)
 import Data.ByteString (ByteString)
-import UnliftIO (Exception, MonadIO, Typeable, hFlush, stdout)
+import qualified Data.ByteString.Char8 as BC8
+import qualified Network.HTTP.Conduit as HTTP
+import qualified Network.HTTP.Types.Status as HTTP
+import UnliftIO (Exception, MonadIO, Typeable, displayException, hFlush, stdout)
 import Prelude hiding (log)
 
 type MaxAttempts = Int
@@ -106,6 +109,23 @@ type NumParallelDownloads = Int
 type AuthCookie = ByteString
 
 type Page = Int
+
+data WallpaperSyncException = WallpaperSyncException PreviewURL HTTP.HttpException
+  deriving (Typeable, Show)
+
+instance Exception WallpaperSyncException where
+  displayException
+    ( WallpaperSyncException
+        url
+        (HTTP.HttpExceptionRequest _ (HTTP.StatusCodeException resp _))
+      ) = do
+      let status = HTTP.responseStatus resp
+      url
+        <> ": "
+        <> show (HTTP.statusCode status)
+        <> " "
+        <> BC8.unpack (HTTP.statusMessage status)
+  displayException e = displayException e
 
 log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 log msg = do
