@@ -70,13 +70,14 @@ deleteUnlikedWallpapers ::
   m ()
 deleteUnlikedWallpapers localWallpapers favPreviews = do
   let unliked = unlikedWallpapers favPreviews localWallpapers
-  logLn $
-    "Following "
-      <> show (length unliked)
-      <> " wallpapers are not in favorites anymore and will be deleted:\n"
-      <> List.intercalate "\n" unliked
-  wallpaperDir <- asks getWallpaperDir
-  mapM_ removeFile . fmap (wallpaperDir </>) $ unliked
+  unless (null unliked) $ do
+    logLn $
+      "Following "
+        <> show (length unliked)
+        <> " wallpapers are not in favorites anymore and will be deleted:\n"
+        <> List.intercalate "\n" unliked
+    wallpaperDir <- asks getWallpaperDir
+    mapM_ removeFile . fmap (wallpaperDir </>) $ unliked
 
 getFavoritesPage ::
   ( MonadReader env m,
