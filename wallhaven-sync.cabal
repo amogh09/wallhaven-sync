@@ -1,22 +1,18 @@
 cabal-version:      2.4
-name:               wallhaven-downloader
+name:               wallhaven-sync
 version:            0.1.0.0
 
--- A short (one-line) description of the package.
--- synopsis:
--- A longer description of the package.
--- description:
+synopsis: Sync your Wallhaven favorites to your local disk
+description: 
+  wallhaven-sync is a tool for syncing your Wallhaven favorites 
+  to your local disk. 
 
 -- A URL where users can report bugs.
 -- bug-reports:
 license:            MIT
-license-file:       LICENSE
 author:             Amogh Rathore
 maintainer:         amoghdroid09@gmail.com
 
--- A copyright notice.
--- copyright:
--- category:
 extra-source-files: CHANGELOG.md
 
 executable wallhaven-sync
@@ -47,9 +43,10 @@ executable wallhaven-sync
 
     hs-source-dirs:   app
     default-language: Haskell2010
-    extensions:       OverloadedStrings, BangPatterns, FlexibleContexts,
-                      TypeApplications, GeneralizedNewtypeDeriving,
-                      FlexibleInstances, ScopedTypeVariables, TupleSections
+    default-extensions:       
+      OverloadedStrings, BangPatterns, FlexibleContexts,
+      TypeApplications, GeneralizedNewtypeDeriving,
+      FlexibleInstances, ScopedTypeVariables, TupleSections
 
 library wallhaven-sync-internal
     exposed-modules: 
@@ -70,15 +67,16 @@ library wallhaven-sync-internal
         http-types ^>=0.12.3,
         unliftio ^>=0.2.23.0
 
-    hs-source-dirs:   src
-    default-language: Haskell2010
-    extensions: TypeSynonymInstances, BangPatterns
+    hs-source-dirs:     src
+    default-language:   Haskell2010
+    default-extensions: TypeSynonymInstances, BangPatterns
 
 Test-Suite spec
     type:               exitcode-stdio-1.0
     main-is:            Spec.hs
     other-modules:      Util.WallhavenSpec
     hs-source-dirs:     test
+    default-language:   Haskell2010
     ghc-options:        -Wall
     build-depends:    
         base ^>=4.16.3.0, 
