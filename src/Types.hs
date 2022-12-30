@@ -36,9 +36,20 @@ data Config = Config
     configNumParallelDownloads :: NumParallelDownloads,
     -- | Retry config for HTTP requests.
     configRetryConfig :: RetryConfig,
+    -- | Whether to delete unliked wallpapers.
+    configDeleteUnliked :: Bool,
     -- | Cookie to use for authentication.
     configCookie :: AuthCookie
   }
+
+class HasDeleteUnliked a where
+  getDeleteUnliked :: a -> Bool
+
+instance HasDeleteUnliked Config where
+  getDeleteUnliked = configDeleteUnliked
+
+instance HasDeleteUnliked Env where
+  getDeleteUnliked = getDeleteUnliked . envConfig
 
 class HasLog a where
   getLog :: a -> (String -> IO ())
@@ -114,6 +125,9 @@ type LocalWallpapers = [FilePath]
 
 type FavoritePreviews = [PreviewURL]
 
+-- Either local wallpaper path or preview or full wallpaper URL.
+type WallpaperPath = String
+
 data WallpaperSyncException = WallpaperSyncException PreviewURL HTTP.HttpException
   deriving (Typeable, Show)
 
@@ -143,7 +157,10 @@ instance Exception WallpaperSyncException where
     url <> ": " <> displayException e
 
 log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
-log msg = do
+log !msg = do
   logger <- asks getLog
   liftIO $ logger msg
   hFlush stdout
+
+logLn :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
+logLn msg = log (msg <> "\n")

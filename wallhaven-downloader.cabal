@@ -26,13 +26,7 @@ executable wallhaven-sync
     -- Modules included in this executable, other than Main.
     other-modules: 
         Wallhaven.Favorites,
-        Wallhaven.CLI,
-        Retry,
-        Types,
-        Util.Time,
-        Util.List,
-        Util.HTTP,
-        Util.Wallhaven
+        Wallhaven.CLI
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -46,14 +40,39 @@ executable wallhaven-sync
         directory ^>=1.3.8.0,
         optparse-applicative ^>=0.17.0.0,
         mtl ^>=2.3.1,
+        containers ^>=0.6.6,
         split ^>=0.2.3.5,
-        unliftio ^>=0.2.23.0
+        unliftio ^>=0.2.23.0,
+        wallhaven-sync-internal
 
     hs-source-dirs:   app
     default-language: Haskell2010
     extensions:       OverloadedStrings, BangPatterns, FlexibleContexts,
                       TypeApplications, GeneralizedNewtypeDeriving,
                       FlexibleInstances, ScopedTypeVariables, TupleSections
+
+library wallhaven-sync-internal
+    exposed-modules: 
+        Retry,
+        Types,
+        Util.Time,
+        Util.List,
+        Util.HTTP,
+        Util.Wallhaven
+
+    build-depends:    
+        base ^>=4.16.3.0,
+        mtl ^>=2.3.1,
+        bytestring ^>=0.11.3.1,
+        http-conduit ^>=2.3.8, 
+        containers ^>=0.6.6,
+        split ^>=0.2.3.5,
+        http-types ^>=0.12.3,
+        unliftio ^>=0.2.23.0
+
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    extensions: TypeSynonymInstances, BangPatterns
 
 Test-Suite spec
     type:               exitcode-stdio-1.0
@@ -63,6 +82,7 @@ Test-Suite spec
     ghc-options:        -Wall
     build-depends:    
         base ^>=4.16.3.0, 
-        hspec ^>=2.10.6
-        -- wallhaven-sync
+        hspec ^>=2.10.6,
+        QuickCheck ^>=2.14.2,
+        wallhaven-sync-internal
     build-tool-depends: hspec-discover:hspec-discover ^>=2.10.6

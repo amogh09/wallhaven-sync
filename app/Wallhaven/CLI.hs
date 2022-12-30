@@ -24,7 +24,8 @@ data CLIOpts = CLIOpts
   { cliOptsWallpaperDir :: FilePath,
     cliOptsNumParallelDownloads :: Int,
     cliOptsNumRetries :: Int,
-    cliOptsRetryDelay :: Int
+    cliOptsRetryDelay :: Int,
+    cliOptsDeleteUnliked :: Bool
   }
 
 -- Parser for command line options.
@@ -62,6 +63,7 @@ cliOptsParser =
           <> showDefault
           <> help "Number of seconds to wait between retries"
       )
+    <*> switch (long "delete-unliked" <> help "Delete unliked wallpapers")
 
 cliOptsToConfig :: CLIOpts -> ByteString -> Config
 cliOptsToConfig opts =
@@ -69,6 +71,7 @@ cliOptsToConfig opts =
     (cliOptsWallpaperDir opts)
     (cliOptsNumParallelDownloads opts)
     (RetryConfig (cliOptsNumRetries opts) (seconds $ cliOptsRetryDelay opts))
+    (cliOptsDeleteUnliked opts)
 
 runCLIApp :: IO ()
 runCLIApp = do

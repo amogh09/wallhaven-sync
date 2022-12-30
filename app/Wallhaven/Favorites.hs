@@ -1,14 +1,14 @@
 module Wallhaven.Favorites (Config (..), syncAllWallpapers, Env (..)) where
 
-import Control.Monad (forever, unless)
+import Control.Monad (forever, unless, when)
 import Control.Monad.Reader (MonadReader, asks)
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import Data.Either (lefts)
-import Data.List (find, isInfixOf)
-import Data.List.Split (splitOn)
+import qualified Data.List as List
 import qualified Network.HTTP.Simple as HTTP
+import System.FilePath
 import Text.HTML.TagSoup (fromAttrib, parseTags, (~==))
 import Text.StringLike (StringLike)
 import Types
@@ -18,6 +18,7 @@ import UnliftIO.Directory
 import UnliftIO.IO.File
 import Util.HTTP (http2XXWithRetry)
 import Util.List (batches)
+import Util.Wallhaven (unlikedWallpapers, wallpaperName)
 import Prelude hiding (log, writeFile)
 
 syncAllWallpapers ::
@@ -28,13 +29,17 @@ syncAllWallpapers ::
     HasAuthCookie env,
     HasRetryConfig env,
     HasLog env,
-    HasNumParallelDownloads env
+    HasNumParallelDownloads env,
+    HasDeleteUnliked env
   ) =>
   m ()
 syncAllWallpapers = do
   asks getWallpaperDir >>= createDirectoryIfMissing True
   localWallpapers <- getLocalWallpapers
-  getFavoritePreviewsStartingPage 1 >>= syncWallpapers localWallpapers
+  favPreviews <- getFavoritePreviewsStartingPage 1
+  shouldDeleteUnliked <- asks getDeleteUnliked
+  when shouldDeleteUnliked $ deleteUnlikedWallpapers localWallpapers favPreviews
+  syncWallpapers localWallpapers favPreviews
 
 getLocalWallpapers ::
   (MonadReader env m, HasWallpaperDir env, MonadIO m) =>
@@ -58,13 +63,20 @@ getFavoritePreviewsStartingPage page = do
       (<> urls) <$> getFavoritePreviewsStartingPage (page + 1)
 
 -- Deletes the local wallpapers that are not in the favorites anymore.
-deleteUnknownWallpapers :: MonadIO m => LocalWallpapers -> FavoritePreviews -> m ()
-deleteUnknownWallpapers localWallpapers favPreviews = do
-  let unknownWallpapers = filter notFavorite localWallpapers
-  mapM_ removeFile unknownWallpapers
-  where
-    notFavorite :: FilePath -> Bool
-    notFavorite localWallpaper = not . any (wallpaperName localWallpaper `isInfixOf`) $ favPreviews
+deleteUnlikedWallpapers ::
+  (MonadIO m, MonadReader env m, HasLog env, HasWallpaperDir env) =>
+  LocalWallpapers ->
+  FavoritePreviews ->
+  m ()
+deleteUnlikedWallpapers localWallpapers favPreviews = do
+  let unliked = unlikedWallpapers favPreviews localWallpapers
+  logLn $
+    "Following "
+      <> show (length unliked)
+      <> " wallpapers are not in favorites anymore and will be deleted:\n"
+      <> List.intercalate "\n" unliked
+  wallpaperDir <- asks getWallpaperDir
+  mapM_ removeFile . fmap (wallpaperDir </>) $ unliked
 
 getFavoritesPage ::
   ( MonadReader env m,
@@ -96,7 +108,7 @@ parseFavoritePreviews =
 parseFullWallpaperURL :: (Show str, StringLike str) => str -> Maybe str
 parseFullWallpaperURL =
   fmap (fromAttrib "src")
-    . find (~== ("<img id=\"wallpaper\">" :: String))
+    . List.find (~== ("<img id=\"wallpaper\">" :: String))
     . parseTags
 
 syncWallpapers ::
@@ -167,16 +179,13 @@ syncWallpaper ::
   m ()
 syncWallpaper localWallpapers progressVar url = do
   let name = wallpaperName url
-  unless (any (isInfixOf name) localWallpapers) $ do
+  unless (any (List.isInfixOf name) localWallpapers) $ do
     http2XXWithRetry (HTTP.parseRequest_ url)
       >>= maybe
         (throwIO $ FullWallpaperURLParseException name)
         (downloadFullWallpaper . BC8.unpack)
         . parseFullWallpaperURL
   modifyMVar_ progressVar (return . (+ 1))
-
-wallpaperName :: URL -> WallpaperName
-wallpaperName = last . splitOn "/"
 
 downloadFullWallpaper ::
   ( MonadUnliftIO m,
