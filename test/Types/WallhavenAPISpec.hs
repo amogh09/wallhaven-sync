@@ -7,11 +7,38 @@ import Types.WallhavenAPI
 spec :: Spec
 spec = do
   describe "Wallhaven API" $ do
-    it "can parse a collection" $ do
-      let json = "{\"id\": 1, \"label\": \"test\"}"
-      let expected = WallhavenCollection 1 "test"
-      Aeson.decode json `shouldBe` Just expected
-    it "can parse a collections response" $ do
-      let json = "{\"data\": [{\"id\": 1, \"label\": \"test\"}]}"
-      let expected = WallhavenCollectionsResponse [WallhavenCollection 1 "test"]
-      Aeson.decode json `shouldBe` Just expected
+    describe "JSON decoding" $ do
+      it "can parse a collection" $ do
+        let json = "{\"id\": 1, \"label\": \"test\", \"unknown\": \"value\"}"
+            expected = WallhavenCollection 1 "test"
+        Aeson.decode json `shouldBe` Just expected
+      it "can parse a collections response" $ do
+        let json = "{\"data\": [{\"id\": 1, \"label\": \"test\"}]}"
+            expected = WallhavenCollectionsResponse [WallhavenCollection 1 "test"]
+        Aeson.decode json `shouldBe` Just expected
+      it "can parse a collection wallpaper" $ do
+        let json = "{\"id\": \"1\", \"path\": \"https://wallhaven.cc/w/1\"}"
+            expected = WallhavenCollectionWallpaper "1" "https://wallhaven.cc/w/1"
+        Aeson.decode json `shouldBe` Just expected
+      it "can parse a collection wallpapers response" $ do
+        let json = "{\"data\": [{\"id\": \"1\", \"path\": \"https://wallhaven.cc/w/1\"}]}"
+            expected =
+              WallhavenCollectionWallpapersResponse
+                [WallhavenCollectionWallpaper "1" "https://wallhaven.cc/w/1"]
+        Aeson.decode json `shouldBe` Just expected
+    describe "findCollectionByLabel" $ do
+      it "can find a collection by label" $ do
+        let response =
+              WallhavenCollectionsResponse
+                [ WallhavenCollection 1 "test",
+                  WallhavenCollection 2 "test2"
+                ]
+        findCollectionByLabel "test" response
+          `shouldBe` Just (WallhavenCollection 1 "test")
+      it "returns Nothing if the collection is not found" $ do
+        let response =
+              WallhavenCollectionsResponse
+                [ WallhavenCollection 1 "test",
+                  WallhavenCollection 2 "test2"
+                ]
+        findCollectionByLabel "test3" response `shouldBe` Nothing
