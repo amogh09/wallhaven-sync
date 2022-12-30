@@ -38,9 +38,31 @@ data Config = Config
     configRetryConfig :: RetryConfig,
     -- | Whether to delete unliked wallpapers.
     configDeleteUnliked :: Bool,
+    -- | Wallhaven usename
+    configUsername :: String,
+    -- | Wallhaven API Key
+    configWallhavenAPIKey :: String,
     -- | Cookie to use for authentication.
     configCookie :: AuthCookie
   }
+
+class HasWallhavenUsername a where
+  getWallhavenUsername :: a -> String
+
+instance HasWallhavenUsername Config where
+  getWallhavenUsername = configUsername
+
+instance HasWallhavenUsername Env where
+  getWallhavenUsername = getWallhavenUsername . envConfig
+
+class HasWallhavenAPIKey a where
+  getWallhavenAPIKey :: a -> String
+
+instance HasWallhavenAPIKey Config where
+  getWallhavenAPIKey = configWallhavenAPIKey
+
+instance HasWallhavenAPIKey Env where
+  getWallhavenAPIKey = getWallhavenAPIKey . envConfig
 
 class HasDeleteUnliked a where
   getDeleteUnliked :: a -> Bool

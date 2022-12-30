@@ -25,7 +25,9 @@ data CLIOpts = CLIOpts
     cliOptsNumParallelDownloads :: Int,
     cliOptsNumRetries :: Int,
     cliOptsRetryDelay :: Int,
-    cliOptsDeleteUnliked :: Bool
+    cliOptsDeleteUnliked :: Bool,
+    cliOptsWallhavenUsername :: String,
+    cliOptsWallhavenAPIKey :: String
   }
 
 -- Parser for command line options.
@@ -64,6 +66,16 @@ cliOptsParser =
           <> help "Number of seconds to wait between retries"
       )
     <*> switch (long "delete-unliked" <> help "Delete unliked wallpapers")
+    <*> strOption
+      ( long "wallhaven-username"
+          <> metavar "USERNAME"
+          <> help "Wallhaven username"
+      )
+    <*> strOption
+      ( long "wallhaven-api-key"
+          <> metavar "API_KEY"
+          <> help "Wallhaven API key"
+      )
 
 cliOptsToConfig :: CLIOpts -> ByteString -> Config
 cliOptsToConfig opts =
@@ -72,6 +84,8 @@ cliOptsToConfig opts =
     (cliOptsNumParallelDownloads opts)
     (RetryConfig (cliOptsNumRetries opts) (seconds $ cliOptsRetryDelay opts))
     (cliOptsDeleteUnliked opts)
+    (cliOptsWallhavenUsername opts)
+    (cliOptsWallhavenAPIKey opts)
 
 runCLIApp :: IO ()
 runCLIApp = do
