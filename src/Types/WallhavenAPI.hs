@@ -3,6 +3,7 @@ module Types.WallhavenAPI
     WallhavenCollection (..),
     WallhavenCollectionWallpaper (..),
     WallhavenCollectionWallpapersResponse (..),
+    WallhavenCollectionWallpapersResponseMeta (..),
     findCollectionByLabel,
   )
 where
@@ -12,8 +13,8 @@ import qualified Data.List as List
 import Types
 
 data WallhavenCollection = WallhavenCollection
-  { wallhavenCollectionID :: Int,
-    wallhavenCollectionLabel :: String
+  { wallhavenCollectionID :: CollectionID,
+    wallhavenCollectionLabel :: Label
   }
   deriving (Show, Eq)
 
@@ -48,6 +49,21 @@ newtype WallhavenCollectionWallpapersResponse = WallhavenCollectionWallpapersRes
 instance FromJSON WallhavenCollectionWallpapersResponse where
   parseJSON = withObject "WallhavenCollectionWallpapersResponse" $ \o -> do
     WallhavenCollectionWallpapersResponse <$> o .: "data"
+
+data WallhavenCollectionWallpapersResponseMeta = WallhavenCollectionWallpapersResponseMeta
+  { wallhavenCollectionWallpapersResponseMetaCurrentPage :: Int,
+    wallhavenCollectionWallpapersResponseMetaLastPage :: Int
+  }
+  deriving (Show, Eq)
+
+instance FromJSON WallhavenCollectionWallpapersResponseMeta where
+  parseJSON = withObject "WallhavenCollectionWallpapersResponseMeta" $ \o -> do
+    data' <- o .: "meta"
+    WallhavenCollectionWallpapersResponseMeta
+      <$> data'
+      .: "current_page"
+      <*> data'
+      .: "last_page"
 
 findCollectionByLabel ::
   String -> WallhavenCollectionsResponse -> Maybe WallhavenCollection

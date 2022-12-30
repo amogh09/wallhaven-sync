@@ -1,5 +1,6 @@
-module Wallhaven.Favorites (Config (..), syncAllWallpapers, Env (..)) where
+module Wallhaven.Favorites (Config (..), syncAllWallpapers, Env (..), getAllCollectionWallpaperFullURLs) where
 
+import Control.Exception.Safe (MonadCatch)
 import Control.Monad (forever, unless, when)
 import Control.Monad.Reader (MonadReader, asks)
 import Data.Bifunctor (first)
@@ -18,7 +19,7 @@ import UnliftIO.Directory
 import UnliftIO.IO.File
 import Util.HTTP (http2XXWithRetry)
 import Util.List (batches)
-import Util.Wallhaven (unlikedWallpapers, wallpaperName)
+import Util.Wallhaven (extractCollectionIDFromCollectionsResponse, extractFullWallpaperURLs, extractWallhavenMetaLastPage, unlikedWallpapers, wallpaperName)
 import Prelude hiding (log, writeFile)
 
 syncAllWallpapers ::
@@ -45,6 +46,97 @@ getLocalWallpapers ::
   (MonadReader env m, HasWallpaperDir env, MonadIO m) =>
   m [FilePath]
 getLocalWallpapers = asks getWallpaperDir >>= listDirectory
+
+-- Calls Wallhaven API and retrieves the ID of the collection to sync.
+getCollectionIDToSync ::
+  ( MonadReader env m,
+    HasCollectionLabel env,
+    HasWallhavenAPIKey env,
+    HasWallhavenUsername env,
+    MonadUnliftIO m,
+    MonadCatch m,
+    HasRetryConfig env
+  ) =>
+  m CollectionID
+getCollectionIDToSync = do
+  apiKey <- asks getWallhavenAPIKey
+  label <- asks getCollectionLabel
+  http2XXWithRetry
+    ( HTTP.parseRequest_ $
+        "https://wallhaven.cc/api/v1/collections?apikey=" <> apiKey
+    )
+    >>= extractCollectionIDFromCollectionsResponse label
+
+getAllCollectionWallpaperFullURLs ::
+  ( MonadReader env m,
+    HasWallhavenUsername env,
+    HasWallhavenAPIKey env,
+    HasRetryConfig env,
+    MonadUnliftIO m,
+    MonadCatch m,
+    HasNumParallelDownloads env
+  ) =>
+  CollectionID ->
+  m [FullWallpaperURL]
+getAllCollectionWallpaperFullURLs collectionID = do
+  lastPage <- getWallpapersLastPage collectionID
+  parallelDownloads <- asks getNumParallelDownloads
+  fmap (concat . concat)
+    . mapM (mapConcurrently (getCollectionWallpaperURLsForPage collectionID))
+    . batches parallelDownloads
+    $ [1 .. lastPage]
+
+wallhavenCollectionPageRequest ::
+  ( MonadCatch m,
+    MonadReader env m,
+    HasWallhavenUsername env,
+    HasWallhavenAPIKey env
+  ) =>
+  CollectionID ->
+  Page ->
+  m HTTP.Request
+wallhavenCollectionPageRequest cid page = do
+  username <- asks getWallhavenUsername
+  apiKey <- asks (BC8.pack . getWallhavenAPIKey)
+  return
+    . HTTP.setRequestQueryString
+      [("apikey", Just apiKey), ("page", Just . BC8.pack $ show page)]
+    . HTTP.parseRequest_
+    $ "https://wallhaven.cc/api/v1/collections/" <> username <> "/" <> show cid
+
+getWallpapersLastPage ::
+  ( MonadCatch m,
+    MonadReader env m,
+    MonadUnliftIO m,
+    HasRetryConfig env,
+    HasWallhavenAPIKey env,
+    HasWallhavenUsername env
+  ) =>
+  CollectionID ->
+  m Int
+getWallpapersLastPage cid = do
+  res <- wallhavenCollectionPageRequest cid 1 >>= http2XXWithRetry
+  extractWallhavenMetaLastPage res
+
+-- wallhavenCollectionPageRequest cid 1
+--   >>= http2XXWithRetry
+--   >>= extractWallhavenMetaLastPage
+
+getCollectionWallpaperURLsForPage ::
+  ( MonadCatch m,
+    MonadReader env m,
+    HasWallhavenUsername env,
+    HasWallhavenAPIKey env,
+    MonadUnliftIO m,
+    HasRetryConfig env
+  ) =>
+  CollectionID ->
+  Page ->
+  m [FullWallpaperURL]
+getCollectionWallpaperURLsForPage cid page =
+  wallhavenCollectionPageRequest cid page
+    >>= http2XXWithRetry
+    >>= extractFullWallpaperURLs
 
 getFavoritePreviewsStartingPage ::
   ( MonadReader env m,

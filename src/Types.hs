@@ -42,9 +42,20 @@ data Config = Config
     configUsername :: String,
     -- | Wallhaven API Key
     configWallhavenAPIKey :: String,
+    -- | Label of the collection to sync
+    configCollectionLabel :: String,
     -- | Cookie to use for authentication.
     configCookie :: AuthCookie
   }
+
+class HasCollectionLabel a where
+  getCollectionLabel :: a -> String
+
+instance HasCollectionLabel Config where
+  getCollectionLabel = configCollectionLabel
+
+instance HasCollectionLabel Env where
+  getCollectionLabel = getCollectionLabel . envConfig
 
 class HasWallhavenUsername a where
   getWallhavenUsername :: a -> String
@@ -147,6 +158,10 @@ type LocalWallpapers = [FilePath]
 
 type FavoritePreviews = [PreviewURL]
 
+type Label = String
+
+type CollectionID = Int
+
 -- Either local wallpaper path or preview or full wallpaper URL.
 type WallpaperPath = String
 
@@ -177,6 +192,20 @@ instance Exception WallpaperSyncException where
       ) = url <> ": " <> "Connection timeout"
   displayException (WallpaperSyncException url e) =
     url <> ": " <> displayException e
+
+data APIException
+  = APIParseException
+      { apiParseExceptionMessage :: String,
+        apiParseExceptionInternalException :: String
+      }
+  | LabelNotFoundException Label
+  deriving (Show, Typeable)
+
+instance Exception APIException where
+  displayException (APIParseException msg e) =
+    "Failed to parse Wallhaven API response: " <> msg
+  displayException (LabelNotFoundException label) =
+    "A collection with label '" <> label <> "' was not found"
 
 log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 log !msg = do

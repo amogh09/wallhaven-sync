@@ -1,6 +1,7 @@
 module Types.WallhavenAPISpec (spec) where
 
 import qualified Data.Aeson as Aeson
+import Data.Either (isLeft)
 import Test.Hspec
 import Types.WallhavenAPI
 
@@ -25,6 +26,15 @@ spec = do
             expected =
               WallhavenCollectionWallpapersResponse
                 [WallhavenCollectionWallpaper "1" "https://wallhaven.cc/w/1"]
+        Aeson.decode json `shouldBe` Just expected
+      it "fails to parse a collection with missing label" $ do
+        let json = "{\"id\": 1}"
+        shouldSatisfy
+          (Aeson.eitherDecode json :: Either String WallhavenCollection)
+          isLeft
+      it "can parse collection wallpapers response meta" $ do
+        let json = "{\"current_page\": 1, \"last_page\": 2}"
+            expected = WallhavenCollectionWallpapersResponseMeta 1 2
         Aeson.decode json `shouldBe` Just expected
     describe "findCollectionByLabel" $ do
       it "can find a collection by label" $ do

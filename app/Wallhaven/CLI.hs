@@ -8,7 +8,7 @@ import Types
 import UnliftIO (MonadIO)
 import UnliftIO.Environment (getEnv)
 import Util.Time (seconds)
-import Wallhaven.Favorites (syncAllWallpapers)
+import Wallhaven.Favorites (getAllCollectionWallpaperFullURLs, syncAllWallpapers)
 
 wallhavenCookieEnvVarName :: String
 wallhavenCookieEnvVarName = "WALLHAVEN_COOKIE"
@@ -27,7 +27,8 @@ data CLIOpts = CLIOpts
     cliOptsRetryDelay :: Int,
     cliOptsDeleteUnliked :: Bool,
     cliOptsWallhavenUsername :: String,
-    cliOptsWallhavenAPIKey :: String
+    cliOptsWallhavenAPIKey :: String,
+    cliOptsCollectionLabel :: String
   }
 
 -- Parser for command line options.
@@ -76,6 +77,13 @@ cliOptsParser =
           <> metavar "API_KEY"
           <> help "Wallhaven API key"
       )
+    <*> strOption
+      ( long "collection-label"
+          <> metavar "LABEL"
+          <> help "Label of the collection to sync"
+          <> value "Default"
+          <> showDefault
+      )
 
 cliOptsToConfig :: CLIOpts -> ByteString -> Config
 cliOptsToConfig opts =
@@ -86,6 +94,7 @@ cliOptsToConfig opts =
     (cliOptsDeleteUnliked opts)
     (cliOptsWallhavenUsername opts)
     (cliOptsWallhavenAPIKey opts)
+    (cliOptsCollectionLabel opts)
 
 runCLIApp :: IO ()
 runCLIApp = do
@@ -93,7 +102,8 @@ runCLIApp = do
   cookie <- loadCookieFromEnv
   let config = cliOptsToConfig cliOpts cookie
       env = Env config putStr
-  runReaderT syncAllWallpapers env
+  cid <- runReaderT (getAllCollectionWallpaperFullURLs 1401577) env
+  putStrLn $ "Collection ID is " <> show cid
   where
     opts =
       info
