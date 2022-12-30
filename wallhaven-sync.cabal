@@ -22,11 +22,12 @@ library wallhaven-sync-internal
         Util.Time
         Util.List
         Util.HTTP
-        Util.Wallhaven
+        Util.Wallhaven,
+        Types.WallhavenAPI
 
     hs-source-dirs:     src
     default-language:   Haskell2010
-    default-extensions: TypeSynonymInstances BangPatterns
+    default-extensions: TypeSynonymInstances BangPatterns OverloadedStrings
     build-depends:
         base ^>=4.16.3.0,
         mtl ^>=2.3.1,
@@ -35,6 +36,7 @@ library wallhaven-sync-internal
         containers ^>=0.6.6,
         split ^>=0.2.3.5,
         http-types ^>=0.12.3,
+        aeson ^>=2.1.1.0,
         unliftio ^>=0.2.23.0
 
 executable wallhaven-sync
@@ -71,11 +73,13 @@ test-suite spec
     main-is:            Spec.hs
     build-tool-depends: hspec-discover:hspec-discover ^>=2.10.6
     hs-source-dirs:     test
-    other-modules:      Util.WallhavenSpec
+    other-modules:      Util.WallhavenSpec Types.WallhavenAPISpec
     default-language:   Haskell2010
+    default-extensions: OverloadedStrings
     ghc-options:        -Wall
     build-depends:
         base ^>=4.16.3.0,
         hspec ^>=2.10.6,
         QuickCheck ^>=2.14.2,
+        aeson ^>=2.1.1.0,
         wallhaven-sync-internal
