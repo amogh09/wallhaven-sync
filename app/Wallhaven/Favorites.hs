@@ -25,6 +25,8 @@ import Util.Wallhaven
   )
 import Prelude hiding (log, writeFile)
 
+-- | Syncs all wallpapers from the given collection identified by its label
+-- to the specified local directory.
 syncAllWallpapers ::
   ( MonadReader env m,
     MonadUnliftIO m,
@@ -51,11 +53,15 @@ syncAllWallpapers = catch go (logLn . displayException @WallpaperSyncException)
       when shouldDeleteUnliked $ deleteUnlikedWallpapers localWallpapers favFullURLs
       syncWallpapers localWallpapers favFullURLs
 
+-- | Gets a list of all local wallpapers in the wallpaper directory.
 getLocalWallpapers ::
   (MonadReader env m, HasWallpaperDir env, MonadIO m) =>
   m [FilePath]
 getLocalWallpapers = asks getWallpaperDir >>= listDirectory
 
+-- | Downloads the given wallpapers using their URLs and saves them to the
+-- wallpaper directory. Skips any wallpapers that are already present.
+-- Displays a progress bar while downloading.
 syncWallpapers ::
   ( MonadUnliftIO m,
     MonadReader env m,
@@ -87,6 +93,14 @@ syncWallpapers localWallpapers urls = do
     else do
       log "All wallpapers synced successfully.\n"
 
+-- | Prints the current state of the download progress bar.
+printProgressBar ::
+  (MonadIO m, MonadReader env m, HasLog env) => MVar Int -> Int -> m ()
+printProgressBar var total = do
+  doneCount <- readMVar var
+  log ("\rSynced: [" <> show doneCount <> "/" <> show total <> "]")
+
+-- | Downloads the given wallpapers in batches of specified size.
 syncWallpapersInBatches ::
   ( MonadUnliftIO m,
     MonadReader env m,
@@ -105,6 +119,9 @@ syncWallpapersInBatches localWallpapers progressVar urls = do
     . mapM (mapConcurrently (try . syncWallpaper localWallpapers progressVar))
     $ batches parallelDownloads urls
 
+--  | Downloads a single wallpaper and saves it to the wallpaper directory.
+--  Skips if the wallpaper is already present.
+--  Updates the progress variable when done.
 syncWallpaper ::
   ( MonadUnliftIO m,
     MonadReader env m,
@@ -118,8 +135,13 @@ syncWallpaper ::
   m ()
 syncWallpaper localWallpapers progressVar url = do
   let name = wallpaperName url
-  unless (name `elem` localWallpapers) $ downloadFullWallpaper name url
+  unless (name `elem` localWallpapers) $ downloadFullWallpaper name
   modifyMVar_ progressVar (return . (+ 1))
+  where
+    downloadFullWallpaper name = do
+      dir <- asks getWallpaperDir
+      let filePath = dir </> name
+      http2XXWithRetry (HTTP.parseRequest_ url) >>= writeBinaryFile filePath
 
 -- Calls Wallhaven API and retrieves the ID of the collection to sync.
 getCollectionIDToSync ::
@@ -142,6 +164,7 @@ getCollectionIDToSync = do
     (http2XXWithRetry req >>= extractCollectionIDFromCollectionsResponse label)
     (throwIO . CollectionsFetchException)
 
+-- | Gets a list of all wallpapers in the given collection.
 getAllCollectionWallpaperFullURLs ::
   ( MonadReader env m,
     HasWallhavenUsername env,
@@ -161,42 +184,7 @@ getAllCollectionWallpaperFullURLs collectionID = do
     . batches parallelDownloads
     $ [1 .. lastPage]
 
-wallhavenCollectionPageRequest ::
-  ( MonadCatch m,
-    MonadReader env m,
-    HasWallhavenUsername env,
-    HasWallhavenAPIKey env
-  ) =>
-  CollectionID ->
-  Page ->
-  m HTTP.Request
-wallhavenCollectionPageRequest cid page = do
-  username <- asks getWallhavenUsername
-  apiKey <- asks (BC8.pack . getWallhavenAPIKey)
-  return
-    . HTTP.setRequestQueryString
-      [("apikey", Just apiKey), ("page", Just . BC8.pack $ show page)]
-    . HTTP.parseRequest_
-    $ "https://wallhaven.cc/api/v1/collections/" <> username <> "/" <> show cid
-
-getWallpapersLastPage ::
-  ( MonadCatch m,
-    MonadReader env m,
-    MonadUnliftIO m,
-    HasRetryConfig env,
-    HasWallhavenAPIKey env,
-    HasWallhavenUsername env
-  ) =>
-  CollectionID ->
-  m Int
-getWallpapersLastPage cid =
-  catch
-    ( wallhavenCollectionPageRequest cid 1
-        >>= http2XXWithRetry
-        >>= extractWallhavenMetaLastPage
-    )
-    (throwIO . CollectionWallpapersFetchException cid 1)
-
+-- | Gets a list of all wallpapers in the given collection for the given page.
 getCollectionWallpaperURLsForPage ::
   ( MonadCatch m,
     MonadReader env m,
@@ -216,21 +204,43 @@ getCollectionWallpaperURLsForPage cid page =
     )
     (throwIO . CollectionWallpapersFetchException cid page)
 
--- getFavoritePreviewsStartingPage ::
---   ( MonadReader env m,
---     HasRetryConfig env,
---     HasAuthCookie env,
---     MonadUnliftIO m,
---     HasLog env
---   ) =>
---   Page ->
---   m [PreviewURL]
--- getFavoritePreviewsStartingPage page = do
---   urls <- fmap BC8.unpack . parseFavoritePreviews <$> getFavoritesPage page
---   if null urls
---     then pure []
---     else do
---       (<> urls) <$> getFavoritePreviewsStartingPage (page + 1)
+-- | Returns an HTTP request for the given page of the given collection.
+wallhavenCollectionPageRequest ::
+  ( MonadCatch m,
+    MonadReader env m,
+    HasWallhavenUsername env,
+    HasWallhavenAPIKey env
+  ) =>
+  CollectionID ->
+  Page ->
+  m HTTP.Request
+wallhavenCollectionPageRequest cid page = do
+  username <- asks getWallhavenUsername
+  apiKey <- asks (BC8.pack . getWallhavenAPIKey)
+  return
+    . HTTP.setRequestQueryString
+      [("apikey", Just apiKey), ("page", Just . BC8.pack $ show page)]
+    . HTTP.parseRequest_
+    $ "https://wallhaven.cc/api/v1/collections/" <> username <> "/" <> show cid
+
+-- | Gets the last page number of the given collection.
+getWallpapersLastPage ::
+  ( MonadCatch m,
+    MonadReader env m,
+    MonadUnliftIO m,
+    HasRetryConfig env,
+    HasWallhavenAPIKey env,
+    HasWallhavenUsername env
+  ) =>
+  CollectionID ->
+  m Int
+getWallpapersLastPage cid =
+  catch
+    ( wallhavenCollectionPageRequest cid 1
+        >>= http2XXWithRetry
+        >>= extractWallhavenMetaLastPage
+    )
+    (throwIO . CollectionWallpapersFetchException cid 1)
 
 -- Deletes the local wallpapers that are not in the favorites anymore.
 deleteUnlikedWallpapers ::
@@ -248,24 +258,3 @@ deleteUnlikedWallpapers localWallpapers favURLs = do
         <> List.intercalate "\n" unliked
     wallpaperDir <- asks getWallpaperDir
     mapM_ removeFile . fmap (wallpaperDir </>) $ unliked
-
-printProgressBar ::
-  (MonadIO m, MonadReader env m, HasLog env) => MVar Int -> Int -> m ()
-printProgressBar var total = do
-  doneCount <- readMVar var
-  log ("\rSynced: [" <> show doneCount <> "/" <> show total <> "]")
-
-downloadFullWallpaper ::
-  ( MonadUnliftIO m,
-    MonadReader env m,
-    HasRetryConfig env,
-    HasWallpaperDir env,
-    HasLog env
-  ) =>
-  WallpaperName ->
-  FullWallpaperURL ->
-  m ()
-downloadFullWallpaper name url = do
-  dir <- asks getWallpaperDir
-  http2XXWithRetry (HTTP.parseRequest_ url)
-    >>= writeBinaryFile (dir <> "/" <> name)
