@@ -33,7 +33,7 @@ spec = do
           (Aeson.eitherDecode json :: Either String WallhavenCollection)
           isLeft
       it "can parse collection wallpapers response meta" $ do
-        let json = "{\"current_page\": 1, \"last_page\": 2}"
+        let json = "{\"meta\": {\"current_page\": 1, \"last_page\": 2}}"
             expected = WallhavenCollectionWallpapersResponseMeta 1 2
         Aeson.decode json `shouldBe` Just expected
     describe "findCollectionByLabel" $ do

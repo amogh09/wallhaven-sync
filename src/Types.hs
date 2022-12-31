@@ -1,7 +1,6 @@
 module Types where
 
 import Control.Monad.Reader (MonadReader, asks, liftIO)
-import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Types.Status as HTTP
@@ -43,9 +42,7 @@ data Config = Config
     -- | Wallhaven API Key
     configWallhavenAPIKey :: String,
     -- | Label of the collection to sync
-    configCollectionLabel :: String,
-    -- | Cookie to use for authentication.
-    configCookie :: AuthCookie
+    configCollectionLabel :: String
   }
 
 class HasCollectionLabel a where
@@ -123,40 +120,15 @@ instance HasConfig Config where
 instance HasConfig Env where
   getConfig = envConfig
 
-class HasAuthCookie a where
-  getAuthCookie :: a -> AuthCookie
-
-instance HasAuthCookie AuthCookie where
-  getAuthCookie = id
-
-instance HasAuthCookie Config where
-  getAuthCookie = configCookie
-
-instance HasAuthCookie Env where
-  getAuthCookie = getAuthCookie . getConfig
-
-newtype FullWallpaperURLParseException = FullWallpaperURLParseException String
-  deriving (Show, Typeable)
-
-instance Exception FullWallpaperURLParseException
-
-type URL = String
-
-type FullWallpaperURL = URL
-
-type PreviewURL = String
+type FullWallpaperURL = String
 
 type WallpaperName = String
 
 type NumParallelDownloads = Int
 
-type AuthCookie = ByteString
-
 type Page = Int
 
 type LocalWallpapers = [FilePath]
-
-type FavoritePreviews = [PreviewURL]
 
 type Label = String
 
@@ -165,47 +137,45 @@ type CollectionID = Int
 -- Either local wallpaper path or preview or full wallpaper URL.
 type WallpaperPath = String
 
-data WallpaperSyncException = WallpaperSyncException PreviewURL HTTP.HttpException
-  deriving (Typeable, Show)
-
-instance Exception WallpaperSyncException where
-  displayException
-    ( WallpaperSyncException
-        url
-        (HTTP.HttpExceptionRequest _ (HTTP.StatusCodeException resp _))
-      ) = do
-      let status = HTTP.responseStatus resp
-      url
-        <> ": "
-        <> show (HTTP.statusCode status)
-        <> " "
-        <> BC8.unpack (HTTP.statusMessage status)
-  displayException
-    ( WallpaperSyncException
-        url
-        (HTTP.HttpExceptionRequest _ HTTP.ResponseTimeout)
-      ) = url <> ": " <> "Response timeout"
-  displayException
-    ( WallpaperSyncException
-        url
-        (HTTP.HttpExceptionRequest _ HTTP.ConnectionTimeout)
-      ) = url <> ": " <> "Connection timeout"
-  displayException (WallpaperSyncException url e) =
-    url <> ": " <> displayException e
-
-data APIException
-  = APIParseException
+data WallpaperSyncException
+  = WallpaperDownloadException FullWallpaperURL HTTP.HttpException
+  | CollectionsFetchException HTTP.HttpException
+  | LabelNotFoundException Label
+  | CollectionWallpapersFetchException CollectionID Page HTTP.HttpException
+  | APIParseException
       { apiParseExceptionMessage :: String,
         apiParseExceptionInternalException :: String
       }
-  | LabelNotFoundException Label
-  deriving (Show, Typeable)
+  deriving (Typeable, Show)
 
-instance Exception APIException where
-  displayException (APIParseException msg e) =
-    "Failed to parse Wallhaven API response: " <> msg
+instance Exception WallpaperSyncException where
+  displayException (WallpaperDownloadException url e) =
+    url <> ": " <> displayHTTPException e
+  displayException (CollectionsFetchException e) =
+    "Failed to fetch collections: " <> displayHTTPException e
   displayException (LabelNotFoundException label) =
     "A collection with label '" <> label <> "' was not found"
+  displayException (CollectionWallpapersFetchException collectionID page e) =
+    "Failed to fetch wallpapers for collection "
+      <> show collectionID
+      <> " page "
+      <> show page
+      <> ": "
+      <> displayHTTPException e
+  displayException (APIParseException msg _) =
+    "Failed to parse Wallhaven API response: " <> msg
+
+displayHTTPException :: HTTP.HttpException -> String
+displayHTTPException (HTTP.HttpExceptionRequest _ (HTTP.StatusCodeException resp _)) = do
+  let status = HTTP.responseStatus resp
+  show (HTTP.statusCode status)
+    <> " "
+    <> BC8.unpack (HTTP.statusMessage status)
+displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ResponseTimeout) =
+  "Response timeout"
+displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ConnectionTimeout) =
+  "Connection timeout"
+displayHTTPException e = displayException e
 
 log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 log !msg = do

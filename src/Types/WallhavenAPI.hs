@@ -33,7 +33,7 @@ instance FromJSON WallhavenCollectionsResponse where
 
 data WallhavenCollectionWallpaper = WallhavenCollectionWallpaper
   { wallhavenCollectionWallpaperID :: String,
-    wallhavenCollectionWallpaperFullURL :: URL
+    wallhavenCollectionWallpaperFullURL :: FullWallpaperURL
   }
   deriving (Show, Eq)
 

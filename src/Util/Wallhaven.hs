@@ -7,35 +7,28 @@ module Util.Wallhaven
   )
 where
 
-import Control.Exception.Safe (MonadCatch, MonadThrow, StringException (StringException), catch, throwM, throwString)
+import Control.Exception.Safe
+  ( MonadCatch,
+    MonadThrow,
+    StringException (StringException),
+    catch,
+    throwM,
+    throwString,
+  )
 import qualified Data.Aeson as Aeson
-import Data.Bifunctor (Bifunctor (first))
 import Data.ByteString (ByteString)
-import qualified Data.List as List
-import Data.List.Split (splitOn)
-import Data.Maybe (fromMaybe)
+import qualified Data.List.Split as List
 import qualified Data.Set as Set
 import Types
 import Types.WallhavenAPI (findCollectionByLabel, wallhavenCollectionID, wallhavenCollectionWallpaperFullURL, wallhavenCollectionWallpapersResponseData, wallhavenCollectionWallpapersResponseMetaLastPage)
 
 wallpaperName :: WallpaperPath -> WallpaperName
-wallpaperName = head . splitOn "." . last . splitOn "/"
+wallpaperName = last . List.splitOn "/"
 
-wallpaperNameFromLocalWallpaper :: FilePath -> WallpaperName
-wallpaperNameFromLocalWallpaper = stripWallhavenPrefix . wallpaperName
-
-stripWallhavenPrefix :: String -> String
-stripWallhavenPrefix name =
-  if "wallhaven-" `List.isPrefixOf` name then drop 10 name else name
-
-unlikedWallpapers :: [PreviewURL] -> LocalWallpapers -> LocalWallpapers
-unlikedWallpapers favs = filter notFavorite
+unlikedWallpapers :: [FullWallpaperURL] -> LocalWallpapers -> LocalWallpapers
+unlikedWallpapers favs = filter (not . (`Set.member` favsSet) . wallpaperName)
   where
-    notFavorite :: WallpaperPath -> Bool
-    notFavorite = not . flip Set.member favNames . wallpaperNameFromLocalWallpaper
-
-    favNames :: Set.Set WallpaperName
-    favNames = Set.fromList $ map wallpaperName favs
+    favsSet = Set.fromList . fmap wallpaperName $ favs
 
 -- Parses the given bytestring as a Wallpaper Collection Response
 -- and returns the ID of the collection with the given label.

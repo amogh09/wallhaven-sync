@@ -1,24 +1,13 @@
 module Wallhaven.CLI (runCLIApp) where
 
 import Control.Monad.Reader (ReaderT (runReaderT))
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BC8
 import Options.Applicative
 import Types
-import UnliftIO (MonadIO)
-import UnliftIO.Environment (getEnv)
 import Util.Time (seconds)
-import Wallhaven.Favorites (getAllCollectionWallpaperFullURLs, syncAllWallpapers)
-
-wallhavenCookieEnvVarName :: String
-wallhavenCookieEnvVarName = "WALLHAVEN_COOKIE"
+import Wallhaven.Favorites (syncAllWallpapers)
 
 defaultWallpaperDir :: FilePath
 defaultWallpaperDir = "/Users/home/wallpapers"
-
--- Load cookie from environment variable.
-loadCookieFromEnv :: MonadIO m => m ByteString
-loadCookieFromEnv = BC8.pack <$> getEnv wallhavenCookieEnvVarName
 
 data CLIOpts = CLIOpts
   { cliOptsWallpaperDir :: FilePath,
@@ -85,7 +74,7 @@ cliOptsParser =
           <> showDefault
       )
 
-cliOptsToConfig :: CLIOpts -> ByteString -> Config
+cliOptsToConfig :: CLIOpts -> Config
 cliOptsToConfig opts =
   Config
     (cliOptsWallpaperDir opts)
@@ -99,11 +88,9 @@ cliOptsToConfig opts =
 runCLIApp :: IO ()
 runCLIApp = do
   cliOpts <- execParser opts
-  cookie <- loadCookieFromEnv
-  let config = cliOptsToConfig cliOpts cookie
+  let config = cliOptsToConfig cliOpts
       env = Env config putStr
-  cid <- runReaderT (getAllCollectionWallpaperFullURLs 1401577) env
-  putStrLn $ "Collection ID is " <> show cid
+  runReaderT syncAllWallpapers env
   where
     opts =
       info

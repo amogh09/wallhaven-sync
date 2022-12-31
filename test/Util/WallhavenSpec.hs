@@ -11,8 +11,9 @@ prefixExtPathGen :: Gen (String, WallpaperName)
 prefixExtPathGen = do
   name <- listOf1 $ elements ['a' .. 'z']
   extension <- listOf1 $ elements ['a' .. 'z']
+  let nameWithExt = name ++ "." ++ extension
   prefix <- arbitrary
-  return (prefix <> "/" <> name <> "." <> extension, name)
+  return (prefix <> "/" <> nameWithExt, nameWithExt)
 
 prop_wallpaperName_prefix_ext :: Property
 prop_wallpaperName_prefix_ext = forAll prefixExtPathGen $ \(path, name) ->
@@ -33,43 +34,44 @@ prop_wallpaperName_no_prefix_ext :: Property
 prop_wallpaperName_no_prefix_ext =
   forAll (listOf1 $ elements ['a' .. 'z']) $ \name ->
     forAll (listOf1 $ elements ['a' .. 'z']) $ \extension ->
-      wallpaperName (name <> "." <> extension) `shouldBe` name
+      let nameWithExt = name ++ "." ++ extension
+       in wallpaperName nameWithExt `shouldBe` nameWithExt
 
 prop_wallpaperName_no_name :: Property
 prop_wallpaperName_no_name =
   forAll (listOf1 $ elements ['a' .. 'z']) $ \extension ->
     forAll arbitrary $ \prefix ->
-      wallpaperName (prefix <> "/." <> extension) `shouldBe` ""
+      wallpaperName (prefix <> "/." <> extension) `shouldBe` "." <> extension
 
 alpha :: Gen String
 alpha = listOf1 $ elements ['a' .. 'z']
 
-previewURLFromName :: String -> PreviewURL
-previewURLFromName = ("https://wallhaven.cc/w/" <>)
+fullWallpaperURL :: String -> String
+fullWallpaperURL name = "https://w.wallhaven.cc/full/2y/" <> name <> ".jpg"
 
 localWallpaperFromName :: String -> Gen WallpaperPath
 localWallpaperFromName name = do
   prefixBits <- listOf1 alpha
-  return $ List.intercalate "/" prefixBits <> "/" <> "wallhaven-" <> name <> ".jpg"
+  return $ List.intercalate "/" prefixBits <> "/" <> name <> ".jpg"
 
-unlikedWallpapersGen :: Gen ([PreviewURL], LocalWallpapers, LocalWallpapers)
+unlikedWallpapersGen :: Gen ([FullWallpaperURL], LocalWallpapers, LocalWallpapers)
 unlikedWallpapersGen = do
   favNames <- listOf1 alpha
-  let previewURLs = map previewURLFromName favNames
+  let favFullURLs = map fullWallpaperURL favNames
   syncedLocalWallpapers <- sublistOf favNames >>= mapM localWallpaperFromName
   unlikedLocalWallpapers <-
     listOf1 alpha
       >>= mapM localWallpaperFromName . filter (not . flip elem favNames)
   return
-    ( previewURLs,
+    ( favFullURLs,
       syncedLocalWallpapers ++ unlikedLocalWallpapers,
       unlikedLocalWallpapers
     )
 
 prop_unliked_wallpapers :: Property
 prop_unliked_wallpapers = forAll unlikedWallpapersGen $
-  \(favPreviewURLs, allLocal, unliked) ->
-    unlikedWallpapers favPreviewURLs allLocal `shouldBe` unliked
+  \(favFullURLs, allLocal, unliked) ->
+    unlikedWallpapers favFullURLs allLocal `shouldBe` unliked
 
 spec :: Spec
 spec = do
