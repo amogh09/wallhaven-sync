@@ -1,28 +1,24 @@
 module Wallhaven.Favorites (syncAllWallpapers) where
 
-import Control.Exception.Safe (MonadCatch)
 import Control.Monad (forever, unless, when)
 import Control.Monad.Reader (MonadReader, asks)
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Char8 as BC8
 import Data.Either (lefts)
 import qualified Data.List as List
+import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
+import qualified Network.HTTP.Types.Status as HTTP
 import System.FilePath
 import Types
+import Types.WallhavenAPI (APIExtractError (..), extractCollectionIDFromCollectionsResponse, extractFullWallpaperURLs, extractWallhavenMetaLastPage)
 import UnliftIO
 import UnliftIO.Concurrent
 import UnliftIO.Directory
 import UnliftIO.IO.File
 import Util.HTTP (http2XXWithRetry)
 import Util.List (batches)
-import Util.Wallhaven
-  ( extractCollectionIDFromCollectionsResponse,
-    extractFullWallpaperURLs,
-    extractWallhavenMetaLastPage,
-    unlikedWallpapers,
-    wallpaperName,
-  )
+import Util.Wallhaven (unlikedWallpapers, wallpaperName)
 import Prelude hiding (log, writeFile)
 
 -- | Syncs all wallpapers from the given collection identified by its label
@@ -38,8 +34,7 @@ syncAllWallpapers ::
     HasDeleteUnliked env,
     HasCollectionLabel env,
     HasWallhavenAPIKey env,
-    HasWallhavenUsername env,
-    MonadCatch m
+    HasWallhavenUsername env
   ) =>
   m ()
 syncAllWallpapers = catch go (logLn . displayException @WallpaperSyncException)
@@ -150,7 +145,6 @@ getCollectionIDToSync ::
     HasWallhavenAPIKey env,
     HasWallhavenUsername env,
     MonadUnliftIO m,
-    MonadCatch m,
     HasRetryConfig env
   ) =>
   m CollectionID
@@ -161,7 +155,11 @@ getCollectionIDToSync = do
         HTTP.parseRequest_ $
           "https://wallhaven.cc/api/v1/collections?apikey=" <> apiKey
   catch
-    (http2XXWithRetry req >>= extractCollectionIDFromCollectionsResponse label)
+    ( http2XXWithRetry req
+        >>= fromEither
+          . first CollectionsExtractException
+          . extractCollectionIDFromCollectionsResponse label
+    )
     (throwIO . CollectionsFetchException)
 
 -- | Gets a list of all wallpapers in the given collection.
@@ -171,7 +169,6 @@ getAllCollectionWallpaperFullURLs ::
     HasWallhavenAPIKey env,
     HasRetryConfig env,
     MonadUnliftIO m,
-    MonadCatch m,
     HasNumParallelDownloads env
   ) =>
   CollectionID ->
@@ -186,8 +183,7 @@ getAllCollectionWallpaperFullURLs collectionID = do
 
 -- | Gets a list of all wallpapers in the given collection for the given page.
 getCollectionWallpaperURLsForPage ::
-  ( MonadCatch m,
-    MonadReader env m,
+  ( MonadReader env m,
     HasWallhavenUsername env,
     HasWallhavenAPIKey env,
     MonadUnliftIO m,
@@ -200,14 +196,15 @@ getCollectionWallpaperURLsForPage cid page =
   catch
     ( wallhavenCollectionPageRequest cid page
         >>= http2XXWithRetry
-        >>= extractFullWallpaperURLs
+        >>= fromEither
+          . first FullWallpaperURLsExtractException
+          . extractFullWallpaperURLs
     )
     (throwIO . CollectionWallpapersFetchException cid page)
 
 -- | Returns an HTTP request for the given page of the given collection.
 wallhavenCollectionPageRequest ::
-  ( MonadCatch m,
-    MonadReader env m,
+  ( MonadReader env m,
     HasWallhavenUsername env,
     HasWallhavenAPIKey env
   ) =>
@@ -225,8 +222,7 @@ wallhavenCollectionPageRequest cid page = do
 
 -- | Gets the last page number of the given collection.
 getWallpapersLastPage ::
-  ( MonadCatch m,
-    MonadReader env m,
+  ( MonadReader env m,
     MonadUnliftIO m,
     HasRetryConfig env,
     HasWallhavenAPIKey env,
@@ -238,7 +234,9 @@ getWallpapersLastPage cid =
   catch
     ( wallhavenCollectionPageRequest cid 1
         >>= http2XXWithRetry
-        >>= extractWallhavenMetaLastPage
+        >>= fromEither
+          . first WallhaveMetaExtractError
+          . extractWallhavenMetaLastPage
     )
     (throwIO . CollectionWallpapersFetchException cid 1)
 
@@ -258,3 +256,51 @@ deleteUnlikedWallpapers localWallpapers favURLs = do
         <> List.intercalate "\n" unliked
     wallpaperDir <- asks getWallpaperDir
     mapM_ removeFile . fmap (wallpaperDir </>) $ unliked
+
+data WallpaperSyncException
+  = WallpaperDownloadException FullWallpaperURL HTTP.HttpException
+  | CollectionsFetchException HTTP.HttpException
+  | CollectionsExtractException APIExtractError
+  | CollectionWallpapersFetchException CollectionID Page HTTP.HttpException
+  | FullWallpaperURLsExtractException APIExtractError
+  | WallhaveMetaExtractError APIExtractError
+  deriving (Typeable, Show)
+
+instance Exception WallpaperSyncException where
+  displayException (WallpaperDownloadException url e) =
+    url <> ": " <> displayHTTPException e
+  displayException (CollectionsFetchException e) =
+    "Failed to fetch collections: " <> displayHTTPException e
+  displayException (CollectionWallpapersFetchException collectionID page e) =
+    "Failed to fetch wallpapers for collection "
+      <> show collectionID
+      <> " page "
+      <> show page
+      <> ": "
+      <> displayHTTPException e
+  displayException (CollectionsExtractException e) = displayAPIExtractError e
+  displayException (FullWallpaperURLsExtractException e) = displayAPIExtractError e
+  displayException (WallhaveMetaExtractError e) = displayAPIExtractError e
+
+displayAPIExtractError :: APIExtractError -> String
+displayAPIExtractError (APIParseError {apiParseErrorType = parseErrorType}) =
+  "Failed to parse " <> parseErrorType <> " from API response"
+displayAPIExtractError
+  ( APIExtractError
+      { apiExtractErrorType = extractErrorType,
+        apiExtractErrorField = extractErrorField
+      }
+    ) =
+    "Failed to find " <> extractErrorField <> " in " <> extractErrorType
+
+displayHTTPException :: HTTP.HttpException -> String
+displayHTTPException (HTTP.HttpExceptionRequest _ (HTTP.StatusCodeException resp _)) = do
+  let status = HTTP.responseStatus resp
+  show (HTTP.statusCode status)
+    <> " "
+    <> BC8.unpack (HTTP.statusMessage status)
+displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ResponseTimeout) =
+  "Response timeout"
+displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ConnectionTimeout) =
+  "Connection timeout"
+displayHTTPException e = displayException e

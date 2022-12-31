@@ -4,11 +4,17 @@ module Types.WallhavenAPI
     WallhavenCollectionWallpaper (..),
     WallhavenCollectionWallpapersResponse (..),
     WallhavenCollectionWallpapersResponseMeta (..),
+    extractCollectionIDFromCollectionsResponse,
+    extractFullWallpaperURLs,
+    extractWallhavenMetaLastPage,
+    APIExtractError (..),
     findCollectionByLabel,
   )
 where
 
 import Data.Aeson
+import Data.Bifunctor (first)
+import Data.ByteString (ByteString)
 import qualified Data.List as List
 import Types
 
@@ -69,3 +75,39 @@ findCollectionByLabel ::
   String -> WallhavenCollectionsResponse -> Maybe WallhavenCollection
 findCollectionByLabel label =
   List.find ((== label) . wallhavenCollectionLabel) . wallhavenCollectionsResponseData
+
+data APIExtractError
+  = APIParseError {apiParseErrorType :: String, apiParseErrorInternal :: String}
+  | APIExtractError {apiExtractErrorType :: String, apiExtractErrorField :: String}
+  deriving (Show, Eq)
+
+-- Parses the given bytestring as a Wallpaper Collection Response
+-- and returns the ID of the collection with the given label.
+extractCollectionIDFromCollectionsResponse ::
+  Label ->
+  ByteString ->
+  Either APIExtractError CollectionID
+extractCollectionIDFromCollectionsResponse label jsonBS = do
+  collectionsResponse <-
+    first
+      (APIParseError "Collections")
+      (eitherDecodeStrict jsonBS)
+  maybe
+    (Left . APIExtractError "Collections" $ "label '" <> label <> "'")
+    (pure . wallhavenCollectionID)
+    (findCollectionByLabel label collectionsResponse)
+
+-- Parses the given bytestring as Wallhaven meta response and returns
+-- the last page field.
+extractWallhavenMetaLastPage :: ByteString -> Either APIExtractError Int
+extractWallhavenMetaLastPage =
+  fmap wallhavenCollectionWallpapersResponseMetaLastPage
+    . first (APIParseError "Wallpapers Meta")
+    . eitherDecodeStrict
+
+extractFullWallpaperURLs :: ByteString -> Either APIExtractError [FullWallpaperURL]
+extractFullWallpaperURLs =
+  fmap
+    (fmap wallhavenCollectionWallpaperFullURL . wallhavenCollectionWallpapersResponseData)
+    . first (APIParseError "wallpapers")
+    . eitherDecodeStrict
