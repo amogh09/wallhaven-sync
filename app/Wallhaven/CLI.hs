@@ -11,9 +11,6 @@ defaultWallpaperDir = "/Users/home/wallpapers"
 
 data CLIOpts = CLIOpts
   { cliOptsWallpaperDir :: FilePath,
-    cliOptsNumParallelDownloads :: Int,
-    cliOptsNumRetries :: Int,
-    cliOptsRetryDelay :: Int,
     cliOptsDeleteUnliked :: Bool,
     cliOptsWallhavenUsername :: String,
     cliOptsWallhavenAPIKey :: String,
@@ -30,30 +27,6 @@ cliOptsParser =
           <> value defaultWallpaperDir
           <> showDefault
           <> help "Directory where wallpapers will be saved"
-      )
-    <*> option
-      auto
-      ( long "num-parallel-downloads"
-          <> metavar "NUM"
-          <> value 5
-          <> showDefault
-          <> help "Number of wallpapers to download in parallel"
-      )
-    <*> option
-      auto
-      ( long "num-retries"
-          <> metavar "NUM"
-          <> value 5
-          <> showDefault
-          <> help "Number of retries to perform when downloading a wallpaper"
-      )
-    <*> option
-      auto
-      ( long "retry-delay"
-          <> metavar "NUM"
-          <> value 3
-          <> showDefault
-          <> help "Number of seconds to wait between retries"
       )
     <*> switch (long "delete-unliked" <> help "Delete unliked wallpapers")
     <*> strOption
@@ -74,12 +47,18 @@ cliOptsParser =
           <> showDefault
       )
 
+defaultParallelization :: NumParallelDownloads
+defaultParallelization = 5
+
+defaultRetryConfig :: RetryConfig
+defaultRetryConfig = RetryConfig 5 (seconds 3)
+
 cliOptsToConfig :: CLIOpts -> Config
 cliOptsToConfig opts =
   Config
     (cliOptsWallpaperDir opts)
-    (cliOptsNumParallelDownloads opts)
-    (RetryConfig (cliOptsNumRetries opts) (seconds $ cliOptsRetryDelay opts))
+    defaultParallelization
+    defaultRetryConfig
     (cliOptsDeleteUnliked opts)
     (cliOptsWallhavenUsername opts)
     (cliOptsWallhavenAPIKey opts)
@@ -96,6 +75,6 @@ runCLIApp = do
       info
         (cliOptsParser <**> helper)
         ( fullDesc
-            <> progDesc "Sync wallpapers from Wallhaven favorites"
+            <> progDesc "Sync wallpapers from a Wallhaven collection"
             <> header "wallhaven-sync"
         )
