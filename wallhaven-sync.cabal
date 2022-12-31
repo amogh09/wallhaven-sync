@@ -38,7 +38,6 @@ library wallhaven-sync-internal
         split ^>=0.2.3.5,
         http-types ^>=0.12.3,
         aeson ^>=2.1.1.0,
-        safe-exceptions ^>=0.1.7.3,
         unliftio ^>=0.2.23.0
 
 executable wallhaven-sync
@@ -54,7 +53,7 @@ executable wallhaven-sync
         GeneralizedNewtypeDeriving FlexibleInstances ScopedTypeVariables
         TupleSections
 
-    ghc-options:        -Wall
+    ghc-options:        -Wall -threaded
     build-depends:
         base ^>=4.16.3.0,
         http-conduit ^>=2.3.8,
