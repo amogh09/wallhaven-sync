@@ -186,7 +186,7 @@ parseCollectionID label jsonBS = do
       CollectionsParseException
       (eitherDecodeStrict jsonBS)
   maybe
-    (Left . CollectionsParseException $ label)
+    (Left . CollectionNotFoundException $ label)
     (pure . wallhavenCollectionID)
     (findCollectionByLabel label collectionsResponse)
 
