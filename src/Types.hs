@@ -39,8 +39,19 @@ data Config = Config
     -- | Wallhaven API Key
     configWallhavenAPIKey :: String,
     -- | Label of the collection to sync
-    configCollectionLabel :: String
+    configCollectionLabel :: String,
+    -- | Debug mode
+    configDebug :: Bool
   }
+
+class HasDebug a where
+  getDebug :: a -> Bool
+
+instance HasDebug Config where
+  getDebug = configDebug
+
+instance HasDebug Env where
+  getDebug = getDebug . envConfig
 
 class HasCollectionLabel a where
   getCollectionLabel :: a -> String

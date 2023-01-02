@@ -41,10 +41,11 @@ syncAllWallpapers ::
     HasDeleteUnliked env,
     HasCollectionLabel env,
     HasWallhavenAPIKey env,
-    HasWallhavenUsername env
+    HasWallhavenUsername env,
+    HasDebug env
   ) =>
   m ()
-syncAllWallpapers = catch go (logLn . displayException @WallpaperSyncException)
+syncAllWallpapers = catch go handler
   where
     go = do
       asks getWallpaperDir >>= createDirectoryIfMissing True
@@ -54,6 +55,12 @@ syncAllWallpapers = catch go (logLn . displayException @WallpaperSyncException)
       shouldDeleteUnliked <- asks getDeleteUnliked
       when shouldDeleteUnliked $ deleteUnlikedWallpapers localWallpapers favFullURLs
       syncWallpapers localWallpapers favFullURLs
+
+    handler e = do
+      debugMode <- asks getDebug
+      if debugMode
+        then logLn $ displayExceptionVerbose e
+        else logLn $ displayException e
 
 -- | Gets a list of all local wallpapers in the wallpaper directory.
 getLocalWallpapers ::
@@ -295,6 +302,39 @@ data WallpaperSyncException
   | WallhavenMetaParseException String
   deriving (Typeable, Show)
 
+displayExceptionVerbose :: WallpaperSyncException -> String
+displayExceptionVerbose (WallpaperDownloadException url e) =
+  url
+    <> ": "
+    <> displayHTTPException e
+    <> "\n"
+    <> "Verbose exception: "
+    <> displayException e
+displayExceptionVerbose (CollectionsFetchException e) =
+  "Failed to fetch collections: "
+    <> displayHTTPException e
+    <> "\n"
+    <> "Verbose exception: "
+    <> displayException e
+displayExceptionVerbose (CollectionsParseException e) =
+  "Failed to parse API response to collections: " <> e
+displayExceptionVerbose (CollectionNotFoundException label) =
+  "Collection with label " <> label <> " was not found"
+displayExceptionVerbose (CollectionWallpapersFetchException collectionID page e) =
+  "Failed to fetch wallpapers for collection "
+    <> show collectionID
+    <> " page "
+    <> show page
+    <> ": "
+    <> displayHTTPException e
+    <> "\n"
+    <> "Verbose exception: "
+    <> displayException e
+displayExceptionVerbose (WallpapersParseException e) =
+  "Failed to parse wallpapers response: " <> e
+displayExceptionVerbose (WallhavenMetaParseException e) =
+  "Failed to parse meta information from wallpapers response: " <> e
+
 instance Exception WallpaperSyncException where
   displayException (WallpaperDownloadException url e) =
     url <> ": " <> displayHTTPException e
@@ -326,4 +366,6 @@ displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ResponseTimeout) =
   "Response timeout"
 displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ConnectionTimeout) =
   "Connection timeout"
+displayHTTPException (HTTP.HttpExceptionRequest _ (HTTP.ConnectionFailure _)) =
+  "Failed to connect to Wallhaven"
 displayHTTPException e = displayException e

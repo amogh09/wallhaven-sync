@@ -14,7 +14,8 @@ data CLIOpts = CLIOpts
     cliOptsDeleteUnliked :: Bool,
     cliOptsWallhavenUsername :: String,
     cliOptsWallhavenAPIKey :: String,
-    cliOptsCollectionLabel :: String
+    cliOptsCollectionLabel :: String,
+    cliOptsDebug :: Bool
   }
 
 -- Parser for command line options.
@@ -46,6 +47,7 @@ cliOptsParser =
           <> value "Default"
           <> showDefault
       )
+    <*> switch (long "debug" <> help "Debug mode")
 
 defaultParallelization :: NumParallelDownloads
 defaultParallelization = 5
@@ -63,6 +65,7 @@ cliOptsToConfig opts =
     (cliOptsWallhavenUsername opts)
     (cliOptsWallhavenAPIKey opts)
     (cliOptsCollectionLabel opts)
+    (cliOptsDebug opts)
 
 runCLIApp :: IO ()
 runCLIApp = do
