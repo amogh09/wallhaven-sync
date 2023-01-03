@@ -53,14 +53,15 @@ Available options:
 | `wallhaven-api-key` | Your wallhaven API key. | | Yes |
 | `--delete-unliked` | If this flag is present then `wallhaven-sync` will delete wallpapers that are in the local directory but not in the specified collection. This option is useful for deleting wallpapers that were unliked from your collection. | NA | No |
 
-### For downloading your Wallhaven favorites to default directory
+### Example usage
+**For downloading your Wallhaven favorites to default directory**
 `wallhaven-sync --wallhaven-username USERNAME --wallhaven-api-key API_KEY`
 
-### For downloading your wallhaven favorites to ~/wallhaven directory
+**For downloading your wallhaven favorites to ~/wallhaven directory**
 `wallhaven-sync --wallhaven-username USERNAME --wallhaven-api-key API_KEY --wallpaper-dir ~/wallhaven`
 
-### For syncing (deleting unliked wallpapers from local directory and downloading wallpapers from the collection) Wallhaven favorites to default directory
+**For syncing (deleting unliked wallpapers from local directory and downloading wallpapers from the collection) Wallhaven favorites to default directory**
 `wallhaven-sync --wallhaven-username USERNAME --wallhaven-api-key API_KEY --delete-unliked`
 
-### For downloading a collection named "nature" under account "my-account" to default directory
+**For downloading a collection named "nature" under account "my-account" to default directory**
 `wallhaven-sync --wallhaven-username my-account --collection-label nature --wallhaven-api-key API_KEY`
