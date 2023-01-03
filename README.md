@@ -55,13 +55,17 @@ Available options:
 
 ### Example usage
 * For downloading your Wallhaven favorites to default directory
+
 `wallhaven-sync --wallhaven-username USERNAME --wallhaven-api-key API_KEY`
 
 * For downloading your wallhaven favorites to ~/wallhaven directory
+
 `wallhaven-sync --wallhaven-username USERNAME --wallhaven-api-key API_KEY --wallpaper-dir ~/wallhaven`
 
 * For syncing (deleting unliked wallpapers from local directory and downloading wallpapers from the collection) Wallhaven favorites to default directory
+
 `wallhaven-sync --wallhaven-username USERNAME --wallhaven-api-key API_KEY --delete-unliked`
 
 * For downloading a collection named "nature" under account "my-account" to default directory
+
 `wallhaven-sync --wallhaven-username my-account --collection-label nature --wallhaven-api-key API_KEY`
