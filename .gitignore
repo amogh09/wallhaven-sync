@@ -23,3 +23,6 @@ cabal.project.local~
 .ghc.environment.*
 *.vim
 .DS_STORE
+Dockerfile
+wallhaven-sync-mac
+wallhaven-sync-linux
