@@ -22,8 +22,11 @@ library wallhaven-sync-internal
         Util.Time
         Util.List
         Util.HTTP
-        Util.Wallhaven
+        Util.Wallhaven.Interaction
         Types.WallhavenAPI
+
+    other-modules:
+        Util.Wallhaven.Logic
 
     hs-source-dirs:     src
     default-language:   Haskell2010
@@ -35,6 +38,7 @@ library wallhaven-sync-internal
         bytestring ^>=0.11.3.1,
         http-conduit ^>=2.3.8,
         containers ^>=0.6.6,
+        filepath ^>=1.4.100.0,
         split ^>=0.2.3.5,
         http-types ^>=0.12.3,
         aeson ^>=2.1.1.0,

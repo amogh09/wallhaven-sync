@@ -6,7 +6,6 @@ import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import Data.Either (lefts)
-import qualified Data.List as List
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import qualified Network.HTTP.Types.Status as HTTP
@@ -23,9 +22,8 @@ import UnliftIO
 import UnliftIO.Concurrent
 import UnliftIO.Directory
 import UnliftIO.IO.File
-import Util.HTTP (http2XXWithRetry)
 import Util.List (batches)
-import Util.Wallhaven (unlikedWallpapers, wallpaperName)
+import qualified Util.Wallhaven.Interaction as Interaction
 import Prelude hiding (log, writeFile)
 
 -- | Syncs all wallpapers from the given collection identified by its label
@@ -61,12 +59,6 @@ syncAllWallpapers = catch go handler
       if debugMode
         then logLn $ displayExceptionVerbose e
         else logLn $ displayException e
-
--- | Gets a list of all local wallpapers in the wallpaper directory.
-getLocalWallpapers ::
-  (MonadReader env m, HasWallpaperDir env, MonadIO m) =>
-  m [FilePath]
-getLocalWallpapers = asks getWallpaperDir >>= listDirectory
 
 -- | Downloads the given wallpapers using their URLs and saves them to the
 -- wallpaper directory. Skips any wallpapers that are already present.
@@ -143,59 +135,8 @@ syncWallpaper ::
   FullWallpaperURL ->
   m ()
 syncWallpaper localWallpapers progressVar url = do
-  let name = wallpaperName url
-  unless (name `elem` localWallpapers) $ downloadFullWallpaper name
+  Interaction.syncWallpaper localWallpapers url
   modifyMVar_ progressVar (return . (+ 1))
-  where
-    downloadFullWallpaper name = do
-      dir <- asks getWallpaperDir
-      let filePath = dir </> name
-      http2XXWithRetry (HTTP.parseRequest_ url) >>= writeBinaryFile filePath
-
--- Calls Wallhaven API and retrieves the ID of the collection to sync.
-getCollectionIDToSync ::
-  ( MonadReader env m,
-    HasCollectionLabel env,
-    HasWallhavenAPIKey env,
-    HasWallhavenUsername env,
-    MonadUnliftIO m,
-    HasRetryConfig env
-  ) =>
-  m CollectionID
-getCollectionIDToSync = do
-  label <- asks getCollectionLabel
-  req <- wallhavenCollectionsRequest
-  catch
-    (http2XXWithRetry req >>= fromEither . parseCollectionID label)
-    (throwIO . CollectionsFetchException)
-
--- | Returns wallhaven request for fetching all collections of the user.
-wallhavenCollectionsRequest ::
-  (MonadReader env m, HasWallhavenUsername env, HasWallhavenAPIKey env) =>
-  m HTTP.Request
-wallhavenCollectionsRequest = do
-  username <- asks getWallhavenUsername
-  apiKey <- asks getWallhavenAPIKey
-  let url =
-        "https://wallhaven.cc/api/v1/collections/"
-          <> username
-          <> "?apikey="
-          <> apiKey
-  return . HTTP.parseRequest_ $ url
-
--- | Parses Wallhaven collections response and finds the ID of the collection
--- with the provided label.
-parseCollectionID ::
-  Label -> ByteString -> Either WallpaperSyncException CollectionID
-parseCollectionID label jsonBS = do
-  collectionsResponse <-
-    first
-      CollectionsParseException
-      (eitherDecodeStrict jsonBS)
-  maybe
-    (Left . CollectionNotFoundException $ label)
-    (pure . wallhavenCollectionID)
-    (findCollectionByLabel label collectionsResponse)
 
 -- | Gets a list of all wallpapers in the given collection.
 getAllCollectionWallpaperFullURLs ::
@@ -215,157 +156,3 @@ getAllCollectionWallpaperFullURLs collectionID = do
     . mapM (mapConcurrently (getCollectionWallpaperURLsForPage collectionID))
     . batches parallelDownloads
     $ [1 .. lastPage]
-
--- | Gets a list of all wallpapers in the given collection for the given page.
-getCollectionWallpaperURLsForPage ::
-  ( MonadReader env m,
-    HasWallhavenUsername env,
-    HasWallhavenAPIKey env,
-    MonadUnliftIO m,
-    HasRetryConfig env
-  ) =>
-  CollectionID ->
-  Page ->
-  m [FullWallpaperURL]
-getCollectionWallpaperURLsForPage cid page =
-  catch
-    ( wallhavenCollectionPageRequest cid page
-        >>= http2XXWithRetry
-        >>= fromEither
-          . first WallpapersParseException
-          . extractFullWallpaperURLs
-    )
-    (throwIO . CollectionWallpapersFetchException cid page)
-
--- | Returns an HTTP request for the given page of the given collection.
-wallhavenCollectionPageRequest ::
-  ( MonadReader env m,
-    HasWallhavenUsername env,
-    HasWallhavenAPIKey env
-  ) =>
-  CollectionID ->
-  Page ->
-  m HTTP.Request
-wallhavenCollectionPageRequest cid page = do
-  username <- asks getWallhavenUsername
-  apiKey <- asks (BC8.pack . getWallhavenAPIKey)
-  return
-    . HTTP.setRequestQueryString
-      [("apikey", Just apiKey), ("page", Just . BC8.pack $ show page)]
-    . HTTP.parseRequest_
-    $ "https://wallhaven.cc/api/v1/collections/" <> username <> "/" <> show cid
-
--- | Gets the last page number of the given collection.
-getWallpapersLastPage ::
-  ( MonadReader env m,
-    MonadUnliftIO m,
-    HasRetryConfig env,
-    HasWallhavenAPIKey env,
-    HasWallhavenUsername env
-  ) =>
-  CollectionID ->
-  m Int
-getWallpapersLastPage cid =
-  catch
-    ( wallhavenCollectionPageRequest cid 1
-        >>= http2XXWithRetry
-        >>= fromEither
-          . first WallhavenMetaParseException
-          . extractWallhavenMetaLastPage
-    )
-    (throwIO . CollectionWallpapersFetchException cid 1)
-
--- Deletes the local wallpapers that are not in the favorites anymore.
-deleteUnlikedWallpapers ::
-  (MonadIO m, MonadReader env m, HasLog env, HasWallpaperDir env) =>
-  LocalWallpapers ->
-  [FullWallpaperURL] ->
-  m ()
-deleteUnlikedWallpapers localWallpapers favURLs = do
-  let unliked = unlikedWallpapers favURLs localWallpapers
-  unless (null unliked) $ do
-    logLn $
-      "Following "
-        <> show (length unliked)
-        <> " wallpapers are not in favorites anymore and will be deleted:\n"
-        <> List.intercalate "\n" unliked
-    wallpaperDir <- asks getWallpaperDir
-    mapM_ removeFile . fmap (wallpaperDir </>) $ unliked
-
-data WallpaperSyncException
-  = WallpaperDownloadException FullWallpaperURL HTTP.HttpException
-  | CollectionsFetchException HTTP.HttpException
-  | CollectionsParseException String
-  | CollectionNotFoundException Label
-  | CollectionWallpapersFetchException CollectionID Page HTTP.HttpException
-  | WallpapersParseException String
-  | WallhavenMetaParseException String
-  deriving (Typeable, Show)
-
-displayExceptionVerbose :: WallpaperSyncException -> String
-displayExceptionVerbose (WallpaperDownloadException url e) =
-  url
-    <> ": "
-    <> displayHTTPException e
-    <> "\n"
-    <> "Verbose exception: "
-    <> displayException e
-displayExceptionVerbose (CollectionsFetchException e) =
-  "Failed to fetch collections: "
-    <> displayHTTPException e
-    <> "\n"
-    <> "Verbose exception: "
-    <> displayException e
-displayExceptionVerbose (CollectionsParseException e) =
-  "Failed to parse API response to collections: " <> e
-displayExceptionVerbose (CollectionNotFoundException label) =
-  "Collection with label " <> label <> " was not found"
-displayExceptionVerbose (CollectionWallpapersFetchException collectionID page e) =
-  "Failed to fetch wallpapers for collection "
-    <> show collectionID
-    <> " page "
-    <> show page
-    <> ": "
-    <> displayHTTPException e
-    <> "\n"
-    <> "Verbose exception: "
-    <> displayException e
-displayExceptionVerbose (WallpapersParseException e) =
-  "Failed to parse wallpapers response: " <> e
-displayExceptionVerbose (WallhavenMetaParseException e) =
-  "Failed to parse meta information from wallpapers response: " <> e
-
-instance Exception WallpaperSyncException where
-  displayException (WallpaperDownloadException url e) =
-    url <> ": " <> displayHTTPException e
-  displayException (CollectionsFetchException e) =
-    "Failed to fetch collections: " <> displayHTTPException e
-  displayException (CollectionsParseException _) =
-    "Failed to parse API response to collections"
-  displayException (CollectionNotFoundException label) =
-    "Collection with label " <> label <> " was not found"
-  displayException (CollectionWallpapersFetchException collectionID page e) =
-    "Failed to fetch wallpapers for collection "
-      <> show collectionID
-      <> " page "
-      <> show page
-      <> ": "
-      <> displayHTTPException e
-  displayException (WallpapersParseException _) =
-    "Failed to parse wallpapers response"
-  displayException (WallhavenMetaParseException _) =
-    "Failed to parse meta information from wallpapers response"
-
-displayHTTPException :: HTTP.HttpException -> String
-displayHTTPException (HTTP.HttpExceptionRequest _ (HTTP.StatusCodeException resp _)) = do
-  let status = HTTP.responseStatus resp
-  show (HTTP.statusCode status)
-    <> " "
-    <> BC8.unpack (HTTP.statusMessage status)
-displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ResponseTimeout) =
-  "Response timeout"
-displayHTTPException (HTTP.HttpExceptionRequest _ HTTP.ConnectionTimeout) =
-  "Connection timeout"
-displayHTTPException (HTTP.HttpExceptionRequest _ (HTTP.ConnectionFailure _)) =
-  "Failed to connect to Wallhaven"
-displayHTTPException e = displayException e

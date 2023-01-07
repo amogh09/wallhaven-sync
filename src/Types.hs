@@ -145,6 +145,10 @@ type CollectionID = Int
 -- Either local wallpaper path or preview or full wallpaper URL.
 type WallpaperPath = String
 
+type Username = String
+
+type APIKey = String
+
 log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 log !msg = do
   logger <- asks getLog

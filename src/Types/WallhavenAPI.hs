@@ -72,7 +72,8 @@ instance FromJSON WallhavenCollectionWallpapersResponseMeta where
 findCollectionByLabel ::
   String -> WallhavenCollectionsResponse -> Maybe WallhavenCollection
 findCollectionByLabel label =
-  List.find ((== label) . wallhavenCollectionLabel) . wallhavenCollectionsResponseData
+  List.find ((== label) . wallhavenCollectionLabel)
+    . wallhavenCollectionsResponseData
 
 -- Parses the given bytestring as Wallhaven meta response and returns
 -- the last page field.
