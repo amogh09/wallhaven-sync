@@ -6,9 +6,7 @@ module Retry
   )
 where
 
-import Control.Monad (void)
 import Control.Monad.Reader (MonadReader, ReaderT, asks)
-import Control.Monad.Writer (WriterT, tell)
 import qualified UnliftIO
 import qualified UnliftIO.Concurrent as UnliftIO
 import Prelude hiding (log)
@@ -63,6 +61,3 @@ instance
   CapabilityThreadDelay (ReaderT env m)
   where
   threadDelay = UnliftIO.threadDelay
-
--- instance Monad m => CapabilityThreadDelay (WriterT [String] m) where
---   threadDelay x = void (tell ["delay " <> show x])
