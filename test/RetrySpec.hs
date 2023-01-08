@@ -43,15 +43,15 @@ spec = do
       logs `shouldBe` ["action"]
       attempts `shouldBe` 1
 
-    it "retries three times if actions fails each time" $ do
+    it "exhausts all attempts if action fails each time" $ do
       let action = tell ["action"] >> modify (+ 1) >> pure (Left "error")
       ((res, attempts), logs) <-
-        runTestApp 0 (RetryConfig 3 1000) (retryM isLeft action)
+        runTestApp 0 (RetryConfig 10 1000) (retryM isLeft action)
       res `shouldBe` (Left "error" :: Either String Int)
       shouldBe
         logs
-        (take 5 (repeat "action" `List.interleave` repeat "delay 1000"))
-      attempts `shouldBe` 3
+        (take 19 (repeat "action" `List.interleave` repeat "delay 1000"))
+      attempts `shouldBe` 10
 
     it "stops retrying when the action succeeds" $ do
       let action = do
