@@ -5,7 +5,7 @@ import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck
 import Types
-import Util.Wallhaven (unlikedWallpapers, wallpaperName)
+import Util.Wallhaven.Logic (unlikedWallpapers, wallpaperName)
 
 prefixExtPathGen :: Gen (String, WallpaperName)
 prefixExtPathGen = do

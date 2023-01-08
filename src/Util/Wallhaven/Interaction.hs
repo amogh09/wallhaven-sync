@@ -14,44 +14,47 @@ import Control.Applicative (liftA2)
 import Control.Monad (unless)
 import Control.Monad.Reader.Class (MonadReader, asks)
 import Data.Bifunctor (first)
-import qualified Data.List as List
 import qualified Network.HTTP.Simple as HTTP
+import qualified Retry
 import System.FilePath ((</>))
 import Types
 import qualified Types.WallhavenAPI as API
-import UnliftIO (MonadIO, MonadUnliftIO, fromEither, liftIO, throwIO)
+import UnliftIO (MonadIO, MonadUnliftIO, fromEither, throwIO)
 import UnliftIO.Directory (listDirectory)
 import UnliftIO.Exception (catch)
 import UnliftIO.IO.File (writeBinaryFile)
 import Util.HTTP (http2XXWithRetry)
-import Util.Wallhaven.Exception (WallpaperSyncException (WallhavenMetaParseException))
 import qualified Util.Wallhaven.Exception as Exception
-import Util.Wallhaven.Logic (deleteWallpapers, parseCollectionID, unlikedWallpapers, wallhavenCollectionPageRequest, wallhavenCollectionsRequest, wallpaperName)
+import qualified Util.Wallhaven.Logic as Logic
+import Util.Wallhaven.Monad
+  ( CapabilityDeleteWallpaper,
+    CapabilityGetDownloadedWallpapers,
+    deleteWallpaper,
+    getDownloadedWallpapers,
+  )
 
 -- Deletes the local wallpapers that are not in the favorites anymore.
+-- Returns the wallpapers that were deleted.
 deleteUnlikedWallpapers ::
-  (MonadIO m, MonadReader env m, HasLog env, HasWallpaperDir env) =>
-  LocalWallpapers ->
+  ( Monad m,
+    CapabilityGetDownloadedWallpapers m,
+    CapabilityDeleteWallpaper m
+  ) =>
   [FullWallpaperURL] ->
-  m ()
-deleteUnlikedWallpapers localWallpapers favURLs = do
-  let unliked = unlikedWallpapers favURLs localWallpapers
-  wallpaperDir <- asks getWallpaperDir
-  unless (null unliked) $ do
-    logLn $
-      "Following "
-        <> show (length unliked)
-        <> " wallpapers are not in favorites anymore and will be deleted:\n"
-        <> List.intercalate "\n" unliked
-    liftIO $ deleteWallpapers wallpaperDir unliked
+  m [WallpaperName]
+deleteUnlikedWallpapers favURLs = do
+  unliked <- Logic.unlikedWallpapers favURLs <$> getDownloadedWallpapers
+  unless (null unliked) (mapM_ deleteWallpaper unliked)
+  return unliked
 
 -- | Gets the last page number of the given collection.
 getWallpapersLastPage ::
   ( MonadReader env m,
     MonadUnliftIO m,
-    HasRetryConfig env,
+    Retry.HasRetryConfig env,
     HasWallhavenAPIKey env,
-    HasWallhavenUsername env
+    HasWallhavenUsername env,
+    Retry.CapabilityThreadDelay m
   ) =>
   CollectionID ->
   m Int
@@ -60,7 +63,7 @@ getWallpapersLastPage cid = do
     ( wallhavenCollectionPageReq cid 1
         >>= http2XXWithRetry
         >>= fromEither
-          . first WallhavenMetaParseException
+          . first Exception.WallhavenMetaParseException
           . API.extractWallhavenMetaLastPage
     )
     (throwIO . Exception.CollectionWallpapersFetchException cid 1)
@@ -71,7 +74,8 @@ getCollectionWallpaperURLsForPage ::
     HasWallhavenUsername env,
     HasWallhavenAPIKey env,
     MonadUnliftIO m,
-    HasRetryConfig env
+    Retry.HasRetryConfig env,
+    Retry.CapabilityThreadDelay m
   ) =>
   CollectionID ->
   Page ->
@@ -92,7 +96,7 @@ wallhavenCollectionPageReq ::
   Page ->
   m HTTP.Request
 wallhavenCollectionPageReq cid page =
-  wallhavenCollectionPageRequest
+  Logic.wallhavenCollectionPageRequest
     <$> asks getWallhavenUsername
     <*> asks getWallhavenAPIKey
     <*> pure cid
@@ -104,7 +108,7 @@ wallhavenCollectionsReq ::
   m HTTP.Request
 wallhavenCollectionsReq =
   liftA2
-    wallhavenCollectionsRequest
+    Logic.wallhavenCollectionsRequest
     (asks getWallhavenUsername)
     (asks getWallhavenAPIKey)
 
@@ -115,7 +119,8 @@ getCollectionIDToSync ::
     HasWallhavenAPIKey env,
     HasWallhavenUsername env,
     MonadUnliftIO m,
-    HasRetryConfig env
+    Retry.HasRetryConfig env,
+    Retry.CapabilityThreadDelay m
   ) =>
   m CollectionID
 getCollectionIDToSync = do
@@ -123,7 +128,7 @@ getCollectionIDToSync = do
   catch
     ( wallhavenCollectionsReq
         >>= http2XXWithRetry
-        >>= fromEither . parseCollectionID label
+        >>= fromEither . Logic.parseCollectionID label
     )
     (throwIO . Exception.CollectionsFetchException)
 
@@ -135,21 +140,23 @@ getLocalWallpapers = asks getWallpaperDir >>= listDirectory
 syncWallpaper ::
   ( MonadUnliftIO m,
     MonadReader env m,
-    HasRetryConfig env,
-    HasWallpaperDir env
+    Retry.HasRetryConfig env,
+    HasWallpaperDir env,
+    Retry.CapabilityThreadDelay m
   ) =>
   LocalWallpapers ->
   FullWallpaperURL ->
   m ()
 syncWallpaper localWallpapers url = do
-  let name = wallpaperName url
+  let name = Logic.wallpaperName url
   path <- asks ((</> name) . getWallpaperDir)
   unless (name `elem` localWallpapers) (downloadResource path url)
 
 downloadResource ::
   ( MonadUnliftIO m,
     MonadReader env m,
-    HasRetryConfig env
+    Retry.HasRetryConfig env,
+    Retry.CapabilityThreadDelay m
   ) =>
   FilePath ->
   String ->

@@ -15,18 +15,21 @@ import Network.HTTP.Simple
     httpBS,
   )
 import Network.HTTP.Types (Status, tooManyRequests429)
-import Retry (retryM)
-import Types
+import qualified Retry
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (throwIO, try)
 
 http2XXWithRetry ::
-  (MonadUnliftIO m, MonadReader env m, HasRetryConfig env) =>
+  ( MonadUnliftIO m,
+    MonadReader env m,
+    Retry.HasRetryConfig env,
+    Retry.CapabilityThreadDelay m
+  ) =>
   Request ->
   m ByteString
 http2XXWithRetry req = do
   res <-
-    retryM retryable
+    Retry.retryM retryable
       . try
       . httpBS
       . setRequestCheckStatus

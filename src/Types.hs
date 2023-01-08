@@ -1,23 +1,9 @@
 module Types where
 
 import Control.Monad.Reader (MonadReader, asks, liftIO)
+import Retry (HasRetryConfig, RetryConfig, getRetryConfig)
 import UnliftIO (MonadIO, hFlush, stdout)
 import Prelude hiding (log)
-
-type MaxAttempts = Int
-
-type RetryDelayMicros = Int
-
-data RetryConfig = RetryConfig
-  { maxAttempts :: MaxAttempts,
-    retryDelayMicros :: RetryDelayMicros
-  }
-
-class HasRetryConfig a where
-  getRetryConfig :: a -> RetryConfig
-
-instance HasRetryConfig RetryConfig where
-  getRetryConfig = id
 
 data Env = Env
   { envConfig :: !Config,

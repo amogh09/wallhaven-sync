@@ -2,6 +2,7 @@ module Wallhaven.CLI (runCLIApp) where
 
 import Control.Monad.Reader (ReaderT (runReaderT))
 import Options.Applicative
+import qualified Retry
 import Types
 import Util.Time (seconds)
 import Wallhaven.Favorites (syncAllWallpapers)
@@ -52,8 +53,8 @@ cliOptsParser =
 defaultParallelization :: NumParallelDownloads
 defaultParallelization = 5
 
-defaultRetryConfig :: RetryConfig
-defaultRetryConfig = RetryConfig 5 (seconds 3)
+defaultRetryConfig :: Retry.RetryConfig
+defaultRetryConfig = Retry.RetryConfig 5 (seconds 3)
 
 cliOptsToConfig :: CLIOpts -> Config
 cliOptsToConfig opts =
