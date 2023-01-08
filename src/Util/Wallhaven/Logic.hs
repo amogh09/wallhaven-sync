@@ -4,7 +4,6 @@ module Util.Wallhaven.Logic
     wallhavenCollectionsRequest,
     wallhavenCollectionPageRequest,
     parseCollectionID,
-    deleteWallpapers,
   )
 where
 
@@ -13,13 +12,10 @@ import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.List.Split as List
-import Data.Monoid (Ap)
 import qualified Data.Set as Set
 import qualified Network.HTTP.Simple as HTTP
-import System.FilePath ((</>))
 import Types
 import qualified Types.WallhavenAPI as API
-import UnliftIO.Directory (removeFile)
 import qualified Util.Wallhaven.Exception as Exception
 
 wallpaperName :: WallpaperPath -> WallpaperName
@@ -29,9 +25,6 @@ unlikedWallpapers :: [FullWallpaperURL] -> LocalWallpapers -> LocalWallpapers
 unlikedWallpapers favs = filter (not . (`Set.member` favsSet) . wallpaperName)
   where
     favsSet = Set.fromList . fmap wallpaperName $ favs
-
-deleteWallpapers :: FilePath -> LocalWallpapers -> IO ()
-deleteWallpapers directory = mapM_ removeFile . fmap (directory </>)
 
 -- | Returns an HTTP request for the given page of the given collection.
 wallhavenCollectionPageRequest ::

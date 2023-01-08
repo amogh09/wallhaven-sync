@@ -24,13 +24,15 @@ library wallhaven-sync-internal
         Util.HTTP
         Util.Wallhaven.Interaction
         Types.WallhavenAPI
-
-    other-modules:
         Util.Wallhaven.Logic
+        Util.Wallhaven.Exception
+        Util.Wallhaven.Monad
 
     hs-source-dirs:     src
     default-language:   Haskell2010
-    default-extensions: TypeSynonymInstances BangPatterns OverloadedStrings
+    default-extensions: 
+	    TypeSynonymInstances BangPatterns OverloadedStrings
+        FlexibleInstances
     ghc-options:        -Wall
     build-depends:
         base ^>=4.16.3.0,
@@ -81,13 +83,17 @@ test-suite spec
     other-modules:
         Util.WallhavenSpec
         Types.WallhavenAPISpec
+        RetrySpec
 
     default-language:   Haskell2010
-    default-extensions: OverloadedStrings
+    default-extensions: 
+       OverloadedStrings GeneralizedNewtypeDeriving
+       FlexibleInstances ScopedTypeVariables
     ghc-options:        -Wall
     build-depends:
         base ^>=4.16.3.0,
         hspec ^>=2.10.6,
         QuickCheck ^>=2.14.2,
         aeson ^>=2.1.1.0,
+        mtl ^>=2.3.1,
         wallhaven-sync-internal

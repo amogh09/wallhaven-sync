@@ -1,27 +1,15 @@
 module Wallhaven.Favorites (syncAllWallpapers) where
 
-import Control.Monad (forever, unless, when)
+import Control.Monad (forever, when)
 import Control.Monad.Reader (MonadReader, asks)
 import Data.Bifunctor (first)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BC8
 import Data.Either (lefts)
 import qualified Network.HTTP.Conduit as HTTP
-import qualified Network.HTTP.Simple as HTTP
-import qualified Network.HTTP.Types.Status as HTTP
-import System.FilePath
+import qualified Retry
 import Types
-import Types.WallhavenAPI
-  ( eitherDecodeStrict,
-    extractFullWallpaperURLs,
-    extractWallhavenMetaLastPage,
-    findCollectionByLabel,
-    wallhavenCollectionID,
-  )
 import UnliftIO
 import UnliftIO.Concurrent
 import UnliftIO.Directory
-import UnliftIO.IO.File
 import Util.List (batches)
 import qualified Util.Wallhaven.Interaction as Interaction
 import Prelude hiding (log, writeFile)
@@ -33,7 +21,7 @@ syncAllWallpapers ::
     MonadUnliftIO m,
     MonadIO m,
     HasWallpaperDir env,
-    HasRetryConfig env,
+    Retry.HasRetryConfig env,
     HasLog env,
     HasNumParallelDownloads env,
     HasDeleteUnliked env,
@@ -43,22 +31,24 @@ syncAllWallpapers ::
     HasDebug env
   ) =>
   m ()
-syncAllWallpapers = catch go handler
-  where
-    go = do
-      asks getWallpaperDir >>= createDirectoryIfMissing True
-      localWallpapers <- getLocalWallpapers
-      collectionID <- getCollectionIDToSync
-      favFullURLs <- getAllCollectionWallpaperFullURLs collectionID
-      shouldDeleteUnliked <- asks getDeleteUnliked
-      when shouldDeleteUnliked $ deleteUnlikedWallpapers localWallpapers favFullURLs
-      syncWallpapers localWallpapers favFullURLs
+syncAllWallpapers = undefined
 
-    handler e = do
-      debugMode <- asks getDebug
-      if debugMode
-        then logLn $ displayExceptionVerbose e
-        else logLn $ displayException e
+-- syncAllWallpapers = catch go handler
+--   where
+--     go = do
+--       asks getWallpaperDir >>= createDirectoryIfMissing True
+--       localWallpapers <- getLocalWallpapers
+--       collectionID <- getCollectionIDToSync
+--       favFullURLs <- getAllCollectionWallpaperFullURLs collectionID
+--       shouldDeleteUnliked <- asks getDeleteUnliked
+--       when shouldDeleteUnliked $ deleteUnlikedWallpapers localWallpapers favFullURLs
+--       syncWallpapers localWallpapers favFullURLs
+
+--     handler e = do
+--       debugMode <- asks getDebug
+--       if debugMode
+--         then logLn $ displayExceptionVerbose e
+--         else logLn $ displayException e
 
 -- | Downloads the given wallpapers using their URLs and saves them to the
 -- wallpaper directory. Skips any wallpapers that are already present.
@@ -66,7 +56,7 @@ syncAllWallpapers = catch go handler
 syncWallpapers ::
   ( MonadUnliftIO m,
     MonadReader env m,
-    HasRetryConfig env,
+    Retry.HasRetryConfig env,
     HasWallpaperDir env,
     HasLog env,
     HasNumParallelDownloads env
@@ -74,25 +64,27 @@ syncWallpapers ::
   LocalWallpapers ->
   [FullWallpaperURL] ->
   m ()
-syncWallpapers localWallpapers urls = do
-  progressVar <- newMVar 0 -- to be updated by threads downloading individual wallpapers.
-  results <-
-    withAsync
-      (forever $ printProgressBar progressVar (length urls) >> threadDelay 100000)
-      (const $ syncWallpapersInBatches localWallpapers progressVar urls)
-  printProgressBar progressVar (length urls)
-  log "\n"
-  let exceptions =
-        fmap (uncurry WallpaperDownloadException)
-          . lefts
-          . zipWith (\url res -> first (url,) res) urls
-          $ results
-  if not (null exceptions)
-    then do
-      log $ "Failed to sync the following " <> show (length exceptions) <> " wallpapers.\n"
-      mapM_ log . fmap ((<> "\n") . displayException) $ exceptions
-    else do
-      log "All wallpapers synced successfully.\n"
+syncWallpapers = undefined
+
+-- syncWallpapers localWallpapers urls = do
+--   progressVar <- newMVar 0 -- to be updated by threads downloading individual wallpapers.
+--   results <-
+--     withAsync
+--       (forever $ printProgressBar progressVar (length urls) >> threadDelay 100000)
+--       (const $ syncWallpapersInBatches localWallpapers progressVar urls)
+--   printProgressBar progressVar (length urls)
+--   log "\n"
+--   let exceptions =
+--         fmap (uncurry WallpaperDownloadException)
+--           . lefts
+--           . zipWith (\url res -> first (url,) res) urls
+--           $ results
+--   if not (null exceptions)
+--     then do
+--       log $ "Failed to sync the following " <> show (length exceptions) <> " wallpapers.\n"
+--       mapM_ log . fmap ((<> "\n") . displayException) $ exceptions
+--     else do
+--       log "All wallpapers synced successfully.\n"
 
 -- | Prints the current state of the download progress bar.
 printProgressBar ::
@@ -106,9 +98,10 @@ syncWallpapersInBatches ::
   ( MonadUnliftIO m,
     MonadReader env m,
     HasNumParallelDownloads env,
-    HasRetryConfig env,
+    Retry.HasRetryConfig env,
     HasWallpaperDir env,
-    HasLog env
+    HasLog env,
+    Retry.CapabilityThreadDelay m
   ) =>
   LocalWallpapers ->
   MVar Int ->
@@ -126,9 +119,10 @@ syncWallpapersInBatches localWallpapers progressVar urls = do
 syncWallpaper ::
   ( MonadUnliftIO m,
     MonadReader env m,
-    HasRetryConfig env,
+    Retry.HasRetryConfig env,
     HasWallpaperDir env,
-    HasLog env
+    HasLog env,
+    Retry.CapabilityThreadDelay m
   ) =>
   LocalWallpapers ->
   MVar Int ->
@@ -143,16 +137,18 @@ getAllCollectionWallpaperFullURLs ::
   ( MonadReader env m,
     HasWallhavenUsername env,
     HasWallhavenAPIKey env,
-    HasRetryConfig env,
+    Retry.HasRetryConfig env,
     MonadUnliftIO m,
     HasNumParallelDownloads env
   ) =>
   CollectionID ->
   m [FullWallpaperURL]
-getAllCollectionWallpaperFullURLs collectionID = do
-  lastPage <- getWallpapersLastPage collectionID
-  parallelDownloads <- asks getNumParallelDownloads
-  fmap (concat . concat)
-    . mapM (mapConcurrently (getCollectionWallpaperURLsForPage collectionID))
-    . batches parallelDownloads
-    $ [1 .. lastPage]
+getAllCollectionWallpaperFullURLs = undefined
+
+-- getAllCollectionWallpaperFullURLs collectionID = do
+--   lastPage <- getWallpapersLastPage collectionID
+--   parallelDownloads <- asks getNumParallelDownloads
+--   fmap (concat . concat)
+--     . mapM (mapConcurrently (getCollectionWallpaperURLsForPage collectionID))
+--     . batches parallelDownloads
+--     $ [1 .. lastPage]
