@@ -25,3 +25,6 @@ instance
   CapabilityGetDownloadedWallpapers (ReaderT env m)
   where
   getDownloadedWallpapers = asks getWallpaperDir >>= Dir.listDirectory
+
+class CapabilityGetCollectionURLs m where
+  getCollectionURLs :: m [FullWallpaperURL]
