@@ -5,6 +5,7 @@ import qualified Network.HTTP.Conduit as HTTP
 import qualified Retry
 import Types
 import UnliftIO
+import Util.Batch (batchedM)
 import Util.HTTP (CapabilityHTTP)
 import Util.List (batches)
 import qualified Wallhaven.Action as Action
@@ -106,9 +107,14 @@ syncWallpapersInBatches ::
   m [Either HTTP.HttpException ()]
 syncWallpapersInBatches localWallpapers progressVar urls = do
   parallelDownloads <- asks getNumParallelDownloads
-  fmap concat
-    . mapM (mapConcurrently (try . syncWallpaper localWallpapers progressVar))
-    $ batches parallelDownloads urls
+  batchedM
+    parallelDownloads
+    (try . syncWallpaper localWallpapers progressVar)
+    urls
+
+-- fmap concat
+--   . mapM (mapConcurrently (try . syncWallpaper localWallpapers progressVar))
+--   $ batches parallelDownloads urls
 
 --  | Downloads a single wallpaper and saves it to the wallpaper directory.
 --  Skips if the wallpaper is already present.
@@ -129,24 +135,3 @@ syncWallpaper ::
 syncWallpaper localWallpapers progressVar url = do
   Action.syncWallpaper localWallpapers url
   modifyMVar_ progressVar (return . (+ 1))
-
--- | Gets a list of all wallpapers in the given collection.
-getAllCollectionWallpaperFullURLs ::
-  ( MonadReader env m,
-    HasWallhavenUsername env,
-    HasWallhavenAPIKey env,
-    Retry.HasRetryConfig env,
-    MonadUnliftIO m,
-    HasNumParallelDownloads env
-  ) =>
-  CollectionID ->
-  m [FullWallpaperURL]
-getAllCollectionWallpaperFullURLs = undefined
-
--- getAllCollectionWallpaperFullURLs collectionID = do
---   lastPage <- getWallpapersLastPage collectionID
---   parallelDownloads <- asks getNumParallelDownloads
---   fmap (concat . concat)
---     . mapM (mapConcurrently (getCollectionWallpaperURLsForPage collectionID))
---     . batches parallelDownloads
---     $ [1 .. lastPage]

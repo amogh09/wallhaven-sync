@@ -21,6 +21,7 @@ library wallhaven-sync-internal
         Types
         Util.Time
         Util.List
+        Util.Batch
         Util.HTTP
         Wallhaven.Action
         Types.WallhavenAPI

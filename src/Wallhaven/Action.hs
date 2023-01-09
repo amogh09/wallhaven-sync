@@ -18,14 +18,17 @@ import System.FilePath ((</>))
 import Types
 import qualified Types.WallhavenAPI as API
 import UnliftIO (MonadIO, MonadUnliftIO, fromEither, throwIO)
+import UnliftIO.Async (mapConcurrently)
 import UnliftIO.Directory (listDirectory)
 import UnliftIO.Exception (catch)
 import UnliftIO.IO.File (writeBinaryFile)
+import Util.Batch (batchedM)
 import Util.HTTP
   ( CapabilityHTTP,
     httpBSWithRetry,
     isTooManyRequestsException,
   )
+import Util.List (batches)
 import qualified Wallhaven.Exception as Exception
 import qualified Wallhaven.Logic as Logic
 import Wallhaven.Monad
@@ -171,3 +174,25 @@ downloadResource ::
 downloadResource filepath url =
   httpBSWithRetry isTooManyRequestsException (HTTP.parseRequest_ url)
     >>= writeBinaryFile filepath
+
+-- | Gets a list of all wallpapers in the given collection.
+getAllCollectionWallpaperFullURLs ::
+  ( MonadReader env m,
+    HasWallhavenUsername env,
+    HasWallhavenAPIKey env,
+    Retry.HasRetryConfig env,
+    MonadUnliftIO m,
+    HasNumParallelDownloads env,
+    CapabilityHTTP m,
+    Retry.CapabilityThreadDelay m
+  ) =>
+  CollectionID ->
+  m [FullWallpaperURL]
+getAllCollectionWallpaperFullURLs collectionID = do
+  lastPage <- getWallpapersLastPage collectionID
+  parallelDownloads <- asks getNumParallelDownloads
+  fmap concat
+    . batchedM
+      parallelDownloads
+      (getCollectionWallpaperURLsForPage collectionID)
+    $ [1 .. lastPage]
