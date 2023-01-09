@@ -43,7 +43,7 @@ spec = do
       logs `shouldBe` ["action"]
       attempts `shouldBe` 1
 
-    it "exhausts all attempts if action fails each time" $ do
+    it "exhausts all attempts if the action fails each time" $ do
       let action = tell ["action"] >> modify (+ 1) >> pure (Left "error")
       ((res, attempts), logs) <-
         runTestApp 0 (RetryConfig 10 1000) (retryM isLeft action)
