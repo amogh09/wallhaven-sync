@@ -1,4 +1,4 @@
-module HTTPSpec (spec) where
+module Util.HTTPSpec (spec) where
 
 import Control.Monad.Reader
 import Data.ByteString (ByteString)
