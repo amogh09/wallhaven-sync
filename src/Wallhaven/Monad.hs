@@ -1,4 +1,4 @@
-module Util.Wallhaven.Monad
+module Wallhaven.Monad
   ( deleteWallpaper,
     getDownloadedWallpapers,
     CapabilityDeleteWallpaper,

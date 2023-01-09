@@ -1,4 +1,4 @@
-module Util.Wallhaven.Exception
+module Wallhaven.Exception
   ( WallpaperSyncException (..),
     displayException,
     displayExceptionVerbose,

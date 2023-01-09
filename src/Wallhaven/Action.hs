@@ -1,6 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
-
-module Util.Wallhaven.Interaction
+module Wallhaven.Action
   ( deleteUnlikedWallpapers,
     getCollectionWallpaperURLsForPage,
     syncWallpaper,
@@ -28,9 +26,9 @@ import Util.HTTP
     httpBSWithRetry,
     isTooManyRequestsException,
   )
-import qualified Util.Wallhaven.Exception as Exception
-import qualified Util.Wallhaven.Logic as Logic
-import Util.Wallhaven.Monad
+import qualified Wallhaven.Exception as Exception
+import qualified Wallhaven.Logic as Logic
+import Wallhaven.Monad
   ( CapabilityDeleteWallpaper,
     CapabilityGetDownloadedWallpapers,
     deleteWallpaper,
