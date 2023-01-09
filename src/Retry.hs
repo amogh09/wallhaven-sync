@@ -26,6 +26,17 @@ class HasRetryConfig a where
 instance HasRetryConfig RetryConfig where
   getRetryConfig = id
 
+-- | Capability for delaying the current thread.
+class CapabilityThreadDelay a where
+  -- | Delay the current thread for the given number of microseconds.
+  threadDelay :: Int -> a ()
+
+instance
+  (UnliftIO.MonadUnliftIO m) =>
+  CapabilityThreadDelay (ReaderT env m)
+  where
+  threadDelay = UnliftIO.threadDelay
+
 retryM ::
   (MonadReader env m, HasRetryConfig env, CapabilityThreadDelay m) =>
   (a -> Bool) ->
@@ -52,12 +63,3 @@ helper !attempts delay shouldRetry a = do
   if shouldRetry res
     then threadDelay delay >> helper (attempts - 1) delay shouldRetry a
     else pure res
-
-class CapabilityThreadDelay a where
-  threadDelay :: Int -> a ()
-
-instance
-  (UnliftIO.MonadUnliftIO m) =>
-  CapabilityThreadDelay (ReaderT env m)
-  where
-  threadDelay = UnliftIO.threadDelay

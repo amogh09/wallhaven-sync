@@ -1,15 +1,11 @@
 module Wallhaven.Favorites (syncAllWallpapers) where
 
-import Control.Monad (forever, when)
 import Control.Monad.Reader (MonadReader, asks)
-import Data.Bifunctor (first)
-import Data.Either (lefts)
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Retry
 import Types
 import UnliftIO
-import UnliftIO.Concurrent
-import UnliftIO.Directory
+import Util.HTTP (CapabilityHTTP)
 import Util.List (batches)
 import qualified Util.Wallhaven.Interaction as Interaction
 import Prelude hiding (log, writeFile)
@@ -101,7 +97,8 @@ syncWallpapersInBatches ::
     Retry.HasRetryConfig env,
     HasWallpaperDir env,
     HasLog env,
-    Retry.CapabilityThreadDelay m
+    Retry.CapabilityThreadDelay m,
+    CapabilityHTTP m
   ) =>
   LocalWallpapers ->
   MVar Int ->
@@ -122,7 +119,8 @@ syncWallpaper ::
     Retry.HasRetryConfig env,
     HasWallpaperDir env,
     HasLog env,
-    Retry.CapabilityThreadDelay m
+    Retry.CapabilityThreadDelay m,
+    CapabilityHTTP m
   ) =>
   LocalWallpapers ->
   MVar Int ->

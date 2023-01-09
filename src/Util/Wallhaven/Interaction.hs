@@ -23,7 +23,11 @@ import UnliftIO (MonadIO, MonadUnliftIO, fromEither, throwIO)
 import UnliftIO.Directory (listDirectory)
 import UnliftIO.Exception (catch)
 import UnliftIO.IO.File (writeBinaryFile)
-import Util.HTTP (http2XXWithRetry)
+import Util.HTTP
+  ( CapabilityHTTP,
+    httpBSWithRetry,
+    isTooManyRequestsException,
+  )
 import qualified Util.Wallhaven.Exception as Exception
 import qualified Util.Wallhaven.Logic as Logic
 import Util.Wallhaven.Monad
@@ -54,6 +58,7 @@ getWallpapersLastPage ::
     Retry.HasRetryConfig env,
     HasWallhavenAPIKey env,
     HasWallhavenUsername env,
+    CapabilityHTTP m,
     Retry.CapabilityThreadDelay m
   ) =>
   CollectionID ->
@@ -61,7 +66,7 @@ getWallpapersLastPage ::
 getWallpapersLastPage cid = do
   catch
     ( wallhavenCollectionPageReq cid 1
-        >>= http2XXWithRetry
+        >>= httpBSWithRetry isTooManyRequestsException
         >>= fromEither
           . first Exception.WallhavenMetaParseException
           . API.extractWallhavenMetaLastPage
@@ -75,7 +80,8 @@ getCollectionWallpaperURLsForPage ::
     HasWallhavenAPIKey env,
     MonadUnliftIO m,
     Retry.HasRetryConfig env,
-    Retry.CapabilityThreadDelay m
+    Retry.CapabilityThreadDelay m,
+    CapabilityHTTP m
   ) =>
   CollectionID ->
   Page ->
@@ -83,7 +89,7 @@ getCollectionWallpaperURLsForPage ::
 getCollectionWallpaperURLsForPage cid page = do
   catch
     ( wallhavenCollectionPageReq cid page
-        >>= http2XXWithRetry
+        >>= httpBSWithRetry isTooManyRequestsException
         >>= fromEither
           . first Exception.WallpapersParseException
           . API.extractFullWallpaperURLs
@@ -120,14 +126,15 @@ getCollectionIDToSync ::
     HasWallhavenUsername env,
     MonadUnliftIO m,
     Retry.HasRetryConfig env,
-    Retry.CapabilityThreadDelay m
+    Retry.CapabilityThreadDelay m,
+    CapabilityHTTP m
   ) =>
   m CollectionID
 getCollectionIDToSync = do
   label <- asks getCollectionLabel
   catch
     ( wallhavenCollectionsReq
-        >>= http2XXWithRetry
+        >>= httpBSWithRetry isTooManyRequestsException
         >>= fromEither . Logic.parseCollectionID label
     )
     (throwIO . Exception.CollectionsFetchException)
@@ -142,7 +149,8 @@ syncWallpaper ::
     MonadReader env m,
     Retry.HasRetryConfig env,
     HasWallpaperDir env,
-    Retry.CapabilityThreadDelay m
+    Retry.CapabilityThreadDelay m,
+    CapabilityHTTP m
   ) =>
   LocalWallpapers ->
   FullWallpaperURL ->
@@ -156,10 +164,12 @@ downloadResource ::
   ( MonadUnliftIO m,
     MonadReader env m,
     Retry.HasRetryConfig env,
-    Retry.CapabilityThreadDelay m
+    Retry.CapabilityThreadDelay m,
+    CapabilityHTTP m
   ) =>
   FilePath ->
   String ->
   m ()
 downloadResource filepath url =
-  http2XXWithRetry (HTTP.parseRequest_ url) >>= writeBinaryFile filepath
+  httpBSWithRetry isTooManyRequestsException (HTTP.parseRequest_ url)
+    >>= writeBinaryFile filepath

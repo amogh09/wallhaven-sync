@@ -1,6 +1,12 @@
-module Util.HTTP (http2XXWithRetry) where
+module Util.HTTP
+  ( httpBSWithRetry,
+    isTooManyRequestsException,
+    CapabilityHTTP,
+    httpBS,
+  )
+where
 
-import Control.Monad.Reader (MonadReader)
+import Control.Monad.Reader (MonadReader, ReaderT)
 import Data.ByteString (ByteString)
 import Network.HTTP.Client.Conduit
   ( HttpExceptionContent (StatusCodeException),
@@ -10,24 +16,30 @@ import Network.HTTP.Client.Conduit
 import Network.HTTP.Simple
   ( HttpException (..),
     Request,
-    Response,
-    getResponseBody,
-    httpBS,
   )
-import Network.HTTP.Types (Status, tooManyRequests429)
+import qualified Network.HTTP.Simple as HTTP
+import Network.HTTP.Types (tooManyRequests429)
 import qualified Retry
-import UnliftIO (MonadUnliftIO)
+import UnliftIO (MonadIO, MonadUnliftIO)
 import UnliftIO.Exception (throwIO, try)
 
-http2XXWithRetry ::
-  ( MonadUnliftIO m,
-    MonadReader env m,
+class CapabilityHTTP m where
+  httpBS :: Request -> m ByteString
+
+instance (MonadIO m) => CapabilityHTTP (ReaderT env m) where
+  httpBS = fmap HTTP.getResponseBody . HTTP.httpBS
+
+httpBSWithRetry ::
+  ( CapabilityHTTP m,
     Retry.HasRetryConfig env,
-    Retry.CapabilityThreadDelay m
+    Retry.CapabilityThreadDelay m,
+    MonadUnliftIO m,
+    MonadReader env m
   ) =>
+  (HttpException -> Bool) ->
   Request ->
   m ByteString
-http2XXWithRetry req = do
+httpBSWithRetry shouldRetry req = do
   res <-
     Retry.retryM retryable
       . try
@@ -36,12 +48,13 @@ http2XXWithRetry req = do
       $ req
   case res of
     Left e -> throwIO e
-    Right r -> pure $ getResponseBody r
+    Right r -> pure r
   where
-    retryable :: Either HttpException (Response ByteString) -> Bool
-    retryable (Left (HttpExceptionRequest _ (StatusCodeException response _))) =
-      isRetryableStatus (responseStatus response)
+    retryable (Left e) = shouldRetry e
     retryable _ = False
 
-    isRetryableStatus :: Status -> Bool
-    isRetryableStatus status = status == tooManyRequests429
+isTooManyRequestsException :: HttpException -> Bool
+isTooManyRequestsException
+  (HttpExceptionRequest _ (StatusCodeException response _)) =
+    (== tooManyRequests429) . responseStatus $ response
+isTooManyRequestsException _ = False
