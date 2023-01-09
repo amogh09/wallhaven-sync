@@ -7,7 +7,7 @@ import Types
 import UnliftIO
 import Util.HTTP (CapabilityHTTP)
 import Util.List (batches)
-import qualified Util.Wallhaven.Interaction as Interaction
+import qualified Wallhaven.Action as Action
 import Prelude hiding (log, writeFile)
 
 -- | Syncs all wallpapers from the given collection identified by its label
@@ -127,7 +127,7 @@ syncWallpaper ::
   FullWallpaperURL ->
   m ()
 syncWallpaper localWallpapers progressVar url = do
-  Interaction.syncWallpaper localWallpapers url
+  Action.syncWallpaper localWallpapers url
   modifyMVar_ progressVar (return . (+ 1))
 
 -- | Gets a list of all wallpapers in the given collection.

@@ -1,4 +1,4 @@
-module Util.Wallhaven.Logic
+module Wallhaven.Logic
   ( wallpaperName,
     unlikedWallpapers,
     wallhavenCollectionsRequest,
@@ -16,7 +16,7 @@ import qualified Data.Set as Set
 import qualified Network.HTTP.Simple as HTTP
 import Types
 import qualified Types.WallhavenAPI as API
-import qualified Util.Wallhaven.Exception as Exception
+import qualified Wallhaven.Exception as Exception
 
 wallpaperName :: WallpaperPath -> WallpaperName
 wallpaperName = last . List.splitOn "/"
