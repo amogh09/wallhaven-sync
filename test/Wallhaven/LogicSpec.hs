@@ -6,6 +6,7 @@ import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck
 import Types
 import Wallhaven.Logic (unlikedWallpapers, wallpaperName)
+import Util.Gen (alpha)
 
 prefixExtPathGen :: Gen (String, WallpaperName)
 prefixExtPathGen = do
@@ -42,9 +43,6 @@ prop_wallpaperName_no_name =
   forAll (listOf1 $ elements ['a' .. 'z']) $ \extension ->
     forAll arbitrary $ \prefix ->
       wallpaperName (prefix <> "/." <> extension) `shouldBe` "." <> extension
-
-alpha :: Gen String
-alpha = listOf1 $ elements ['a' .. 'z']
 
 fullWallpaperURL :: String -> String
 fullWallpaperURL name = "https://w.wallhaven.cc/full/2y/" <> name <> ".jpg"
