@@ -7,7 +7,9 @@ module Util.HTTP
 where
 
 import Control.Monad.Reader (MonadReader, ReaderT)
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
+import Data.Either (fromLeft)
 import Network.HTTP.Client.Conduit
   ( HttpExceptionContent (StatusCodeException),
     responseStatus,
@@ -41,17 +43,12 @@ httpBSWithRetry ::
   m ByteString
 httpBSWithRetry shouldRetry req = do
   res <-
-    Retry.retryM retryable
+    Retry.retryM (fromLeft False . first shouldRetry)
       . try
       . httpBS
       . setRequestCheckStatus
       $ req
-  case res of
-    Left e -> throwIO e
-    Right r -> pure r
-  where
-    retryable (Left e) = shouldRetry e
-    retryable _ = False
+  either throwIO pure res
 
 isTooManyRequestsException :: HttpException -> Bool
 isTooManyRequestsException
