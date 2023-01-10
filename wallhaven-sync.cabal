@@ -41,7 +41,7 @@ library wallhaven-sync-internal
     default-language:   Haskell2010
     default-extensions:
         TypeSynonymInstances BangPatterns OverloadedStrings
-        FlexibleInstances
+        FlexibleInstances TupleSections
 
     ghc-options:        -Wall
     build-depends:
@@ -60,7 +60,6 @@ executable wallhaven-sync
     main-is:            Main.hs
     hs-source-dirs:     app
     other-modules:
-        Wallhaven.Favorites
         Wallhaven.CLI
         Wallhaven.Env
 

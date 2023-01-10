@@ -5,8 +5,8 @@ import Options.Applicative
 import qualified Retry
 import Types
 import Util.Time (seconds)
+import Wallhaven.Action (syncAllWallpapers)
 import Wallhaven.Env (Config (Config), Env (Env))
-import Wallhaven.Favorites (syncAllWallpapers)
 
 defaultWallpaperDir :: FilePath
 defaultWallpaperDir = "/Users/home/wallpapers"
@@ -74,7 +74,9 @@ runCLIApp = do
   cliOpts <- execParser opts
   let config = cliOptsToConfig cliOpts
       env = Env config putStr
-  runReaderT syncAllWallpapers env
+      username = cliOptsWallhavenUsername cliOpts
+      label = cliOptsCollectionLabel cliOpts
+  runReaderT (syncAllWallpapers username label :: ReaderT Env IO ()) env
   where
     opts =
       info
