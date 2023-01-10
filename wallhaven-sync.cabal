@@ -23,11 +23,16 @@ library wallhaven-sync-internal
         Util.List
         Util.Batch
         Util.HTTP
-        Wallhaven.Action
-        Types.WallhavenAPI
+
         Wallhaven.Logic
         Wallhaven.Exception
         Wallhaven.Monad
+
+        Wallhaven.API.Class
+        Wallhaven.API.Action
+        Wallhaven.API.Exception
+        Wallhaven.API.Types
+        Wallhaven.API.Logic
 
     hs-source-dirs:     src
     default-language:   Haskell2010
@@ -54,6 +59,7 @@ executable wallhaven-sync
     other-modules:
         Wallhaven.Favorites
         Wallhaven.CLI
+        Wallhaven.Env
 
     default-language:   Haskell2010
     default-extensions:

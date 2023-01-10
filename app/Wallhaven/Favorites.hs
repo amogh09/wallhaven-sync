@@ -1,14 +1,11 @@
 module Wallhaven.Favorites (syncAllWallpapers) where
 
-import Control.Monad.Reader (MonadReader, asks)
-import qualified Network.HTTP.Conduit as HTTP
+import Control.Monad.Reader (MonadReader)
 import qualified Retry
 import Types
 import UnliftIO
-import Util.Batch (batchedM)
-import Util.HTTP (CapabilityHTTP)
-import Util.List (batches)
-import qualified Wallhaven.Action as Action
+import Wallhaven.Env (log)
+import Wallhaven.Monad (HasLog)
 import Prelude hiding (log, writeFile)
 
 -- | Syncs all wallpapers from the given collection identified by its label
@@ -17,15 +14,7 @@ syncAllWallpapers ::
   ( MonadReader env m,
     MonadUnliftIO m,
     MonadIO m,
-    HasWallpaperDir env,
-    Retry.HasRetryConfig env,
-    HasLog env,
-    HasNumParallelDownloads env,
-    HasDeleteUnliked env,
-    HasCollectionLabel env,
-    HasWallhavenAPIKey env,
-    HasWallhavenUsername env,
-    HasDebug env
+    Retry.HasRetryConfig env
   ) =>
   m ()
 syncAllWallpapers = undefined
@@ -50,18 +39,15 @@ syncAllWallpapers = undefined
 -- | Downloads the given wallpapers using their URLs and saves them to the
 -- wallpaper directory. Skips any wallpapers that are already present.
 -- Displays a progress bar while downloading.
-syncWallpapers ::
-  ( MonadUnliftIO m,
-    MonadReader env m,
-    Retry.HasRetryConfig env,
-    HasWallpaperDir env,
-    HasLog env,
-    HasNumParallelDownloads env
-  ) =>
-  LocalWallpapers ->
-  [FullWallpaperURL] ->
-  m ()
-syncWallpapers = undefined
+-- syncWallpapers ::
+--   ( MonadUnliftIO m,
+--     MonadReader env m,
+--     Retry.HasRetryConfig env
+--   ) =>
+--   LocalWallpapers ->
+--   [FullWallpaperURL] ->
+--   m ()
+-- syncWallpapers = undefined
 
 -- syncWallpapers localWallpapers urls = do
 --   progressVar <- newMVar 0 -- to be updated by threads downloading individual wallpapers.
@@ -89,49 +75,3 @@ printProgressBar ::
 printProgressBar var total = do
   doneCount <- readMVar var
   log ("\rSynced: [" <> show doneCount <> "/" <> show total <> "]")
-
--- | Downloads the given wallpapers in batches of specified size.
-syncWallpapersInBatches ::
-  ( MonadUnliftIO m,
-    MonadReader env m,
-    HasNumParallelDownloads env,
-    Retry.HasRetryConfig env,
-    HasWallpaperDir env,
-    HasLog env,
-    Retry.CapabilityThreadDelay m,
-    CapabilityHTTP m
-  ) =>
-  LocalWallpapers ->
-  MVar Int ->
-  [FullWallpaperURL] ->
-  m [Either HTTP.HttpException ()]
-syncWallpapersInBatches localWallpapers progressVar urls = do
-  parallelDownloads <- asks getNumParallelDownloads
-  batchedM
-    parallelDownloads
-    (try . syncWallpaper localWallpapers progressVar)
-    urls
-
--- fmap concat
---   . mapM (mapConcurrently (try . syncWallpaper localWallpapers progressVar))
---   $ batches parallelDownloads urls
-
---  | Downloads a single wallpaper and saves it to the wallpaper directory.
---  Skips if the wallpaper is already present.
---  Updates the progress variable when done.
-syncWallpaper ::
-  ( MonadUnliftIO m,
-    MonadReader env m,
-    Retry.HasRetryConfig env,
-    HasWallpaperDir env,
-    HasLog env,
-    Retry.CapabilityThreadDelay m,
-    CapabilityHTTP m
-  ) =>
-  LocalWallpapers ->
-  MVar Int ->
-  FullWallpaperURL ->
-  m ()
-syncWallpaper localWallpapers progressVar url = do
-  Action.syncWallpaper localWallpapers url
-  modifyMVar_ progressVar (return . (+ 1))

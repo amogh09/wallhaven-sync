@@ -6,7 +6,7 @@ module Util.HTTP
   )
 where
 
-import Control.Monad.Reader (MonadReader, ReaderT)
+import Control.Monad.Reader (MonadReader)
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Data.Either (fromLeft)
@@ -19,17 +19,13 @@ import Network.HTTP.Simple
   ( HttpException (..),
     Request,
   )
-import qualified Network.HTTP.Simple as HTTP
 import Network.HTTP.Types (tooManyRequests429)
 import qualified Retry
-import UnliftIO (MonadIO, MonadUnliftIO)
+import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (throwIO, try)
 
 class CapabilityHTTP m where
   httpBS :: Request -> m ByteString
-
-instance (MonadIO m) => CapabilityHTTP (ReaderT env m) where
-  httpBS = fmap HTTP.getResponseBody . HTTP.httpBS
 
 httpBSWithRetry ::
   ( CapabilityHTTP m,
