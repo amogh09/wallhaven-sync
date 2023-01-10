@@ -1,9 +1,10 @@
-module Types.WallhavenAPISpec (spec) where
+module Wallhaven.API.TypesSpec (spec) where
 
 import qualified Data.Aeson as Aeson
 import Data.Either (isLeft)
 import Test.Hspec
-import Types.WallhavenAPI
+import Wallhaven.API.Logic (findCollectionByLabel)
+import Wallhaven.API.Types
 
 spec :: Spec
 spec = do
@@ -36,19 +37,3 @@ spec = do
         let json = "{\"meta\": {\"current_page\": 1, \"last_page\": 2}}"
             expected = WallhavenCollectionWallpapersResponseMeta 1 2
         Aeson.decode json `shouldBe` Just expected
-    describe "findCollectionByLabel" $ do
-      it "can find a collection by label" $ do
-        let response =
-              WallhavenCollectionsResponse
-                [ WallhavenCollection 1 "test",
-                  WallhavenCollection 2 "test2"
-                ]
-        findCollectionByLabel "test" response
-          `shouldBe` Just (WallhavenCollection 1 "test")
-      it "returns Nothing if the collection is not found" $ do
-        let response =
-              WallhavenCollectionsResponse
-                [ WallhavenCollection 1 "test",
-                  WallhavenCollection 2 "test2"
-                ]
-        findCollectionByLabel "test3" response `shouldBe` Nothing
