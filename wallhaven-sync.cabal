@@ -27,6 +27,7 @@ library wallhaven-sync-internal
         Wallhaven.Logic
         Wallhaven.Exception
         Wallhaven.Monad
+        Wallhaven.Action
 
         Wallhaven.API.Class
         Wallhaven.API.Action

@@ -3,7 +3,6 @@ module Wallhaven.API.TypesSpec (spec) where
 import qualified Data.Aeson as Aeson
 import Data.Either (isLeft)
 import Test.Hspec
-import Wallhaven.API.Logic (findCollectionByLabel)
 import Wallhaven.API.Types
 
 spec :: Spec
