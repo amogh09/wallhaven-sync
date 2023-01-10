@@ -1,5 +1,6 @@
 module Database.FileSystem.Action
   ( deleteWallpaper,
+    saveWallpaper,
     getWallpaperNames,
     HasWallpaperDir (..),
   )
@@ -7,9 +8,11 @@ where
 
 import Control.Monad (when)
 import Control.Monad.Reader (MonadIO, MonadReader, asks)
+import Data.ByteString (ByteString)
 import System.FilePath ((</>))
 import Types (WallpaperName)
 import UnliftIO.Directory (doesFileExist, listDirectory, removeFile)
+import UnliftIO.IO.File (writeBinaryFile)
 
 class HasWallpaperDir a where
   getWallpaperDir :: a -> FilePath
@@ -34,3 +37,15 @@ getWallpaperNames ::
   ) =>
   m [WallpaperName]
 getWallpaperNames = asks getWallpaperDir >>= listDirectory
+
+saveWallpaper ::
+  ( MonadReader env m,
+    HasWallpaperDir env,
+    MonadIO m
+  ) =>
+  WallpaperName ->
+  ByteString ->
+  m ()
+saveWallpaper name wallpaper = do
+  dir <- asks getWallpaperDir
+  writeBinaryFile (dir </> name) wallpaper

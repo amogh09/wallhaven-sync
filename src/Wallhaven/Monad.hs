@@ -5,9 +5,11 @@ module Wallhaven.Monad
     HasDeleteUnliked (..),
     HasLog (..),
     CapabilityGetCollectionURLs (..),
+    CapabilitySaveWallpaper (..),
   )
 where
 
+import Data.ByteString (ByteString)
 import Types
 
 class HasDebug a where
@@ -24,6 +26,9 @@ class CapabilityDeleteWallpaper m where
 
 class CapabilityGetDownloadedWallpapers m where
   getDownloadedWallpapers :: m [WallpaperName]
+
+class CapabilitySaveWallpaper m where
+  saveWallpaper :: WallpaperName -> ByteString -> m ()
 
 class CapabilityGetCollectionURLs m where
   getCollectionURLs :: Username -> Label -> m [FullWallpaperURL]

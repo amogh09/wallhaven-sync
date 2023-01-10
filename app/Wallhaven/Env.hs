@@ -1,4 +1,4 @@
-module Wallhaven.Env (Env (..), Config (..), log, logLn) where
+module Wallhaven.Env (Env (..), Config (..)) where
 
 import Control.Monad.Reader (MonadReader, Reader, ReaderT, asks, liftIO)
 import qualified Database.FileSystem.Action as DBFileSystem
@@ -64,7 +64,7 @@ instance MonadIO m => CapabilityHTTP (ReaderT Env m) where
   httpBS = fmap HTTP.getResponseBody . HTTP.httpBS
 
 instance
-  (MonadUnliftIO m, CapabilityHTTP m) =>
+  (MonadUnliftIO m) =>
   CapabilityGetCollectionURLs (ReaderT Env m)
   where
   getCollectionURLs = WallhavenAPI.getAllCollectionURLs
@@ -72,17 +72,11 @@ instance
 instance (MonadIO m) => CapabilityDeleteWallpaper (ReaderT Env m) where
   deleteWallpaper = DBFileSystem.deleteWallpaper
 
+instance (MonadIO m) => CapabilitySaveWallpaper (ReaderT Env m) where
+  saveWallpaper = DBFileSystem.saveWallpaper
+
 instance
   (MonadIO m) =>
   CapabilityGetDownloadedWallpapers (ReaderT Env m)
   where
   getDownloadedWallpapers = DBFileSystem.getWallpaperNames
-
-log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
-log !msg = do
-  logger <- asks getLog
-  liftIO $ logger msg
-  hFlush stdout
-
-logLn :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
-logLn msg = log (msg <> "\n")
