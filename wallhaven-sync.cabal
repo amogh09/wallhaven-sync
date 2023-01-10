@@ -93,10 +93,12 @@ test-suite spec
     other-modules:
         Wallhaven.LogicSpec
         Wallhaven.ActionSpec
-        Types.WallhavenAPISpec
         RetrySpec
         Util.HTTPSpec
         Util.Gen
+
+        Wallhaven.API.TypesSpec
+        Wallhaven.API.LogicSpec
 
     default-language:   Haskell2010
     default-extensions:
