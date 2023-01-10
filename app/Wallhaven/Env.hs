@@ -1,17 +1,15 @@
 module Wallhaven.Env (Env (..), Config (..)) where
 
-import Control.Monad.Reader (MonadReader, Reader, ReaderT, asks, liftIO)
+import Control.Monad.Reader (ReaderT)
 import qualified Database.FileSystem.Action as DBFileSystem
 import qualified Network.HTTP.Simple as HTTP
 import qualified Retry
 import qualified Types
-import UnliftIO (MonadIO, MonadUnliftIO, hFlush, stdout)
-import qualified UnliftIO.Directory as Dir
+import UnliftIO (MonadIO, MonadUnliftIO)
 import Util.HTTP (CapabilityHTTP, httpBS)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import qualified Wallhaven.API.Class as WallhavenAPI
 import Wallhaven.Monad
-import qualified Wallhaven.Monad as WallhavenAPI
 import Prelude hiding (log)
 
 data Env = Env
@@ -29,12 +27,8 @@ data Config = Config
     configRetryConfig :: Retry.RetryConfig,
     -- | Whether to delete unliked wallpapers.
     configDeleteUnliked :: Bool,
-    -- | Wallhaven usename
-    configUsername :: String,
     -- | Wallhaven API Key
     configWallhavenAPIKey :: String,
-    -- | Label of the collection to sync
-    configCollectionLabel :: String,
     -- | Debug mode
     configDebug :: Bool
   }

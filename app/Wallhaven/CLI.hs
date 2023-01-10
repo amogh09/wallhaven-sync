@@ -64,9 +64,7 @@ cliOptsToConfig opts =
     defaultParallelization
     defaultRetryConfig
     (cliOptsDeleteUnliked opts)
-    (cliOptsWallhavenUsername opts)
     (cliOptsWallhavenAPIKey opts)
-    (cliOptsCollectionLabel opts)
     (cliOptsDebug opts)
 
 runCLIApp :: IO ()
