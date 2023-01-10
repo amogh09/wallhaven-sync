@@ -1,6 +1,5 @@
 module Wallhaven.Monad
   ( CapabilityDeleteWallpaper (..),
-    HasWallpaperDir (..),
     CapabilityGetDownloadedWallpapers (..),
     HasDebug (..),
     HasDeleteUnliked (..),
@@ -19,9 +18,6 @@ class HasDeleteUnliked a where
 
 class HasLog a where
   getLog :: a -> (String -> IO ())
-
-class HasWallpaperDir a where
-  getWallpaperDir :: a -> FilePath
 
 class CapabilityDeleteWallpaper m where
   deleteWallpaper :: WallpaperName -> m ()
