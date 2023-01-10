@@ -5,6 +5,7 @@ import Options.Applicative
 import qualified Retry
 import Types
 import Util.Time (seconds)
+import Wallhaven.Env (Config (Config), Env (Env))
 import Wallhaven.Favorites (syncAllWallpapers)
 
 defaultWallpaperDir :: FilePath

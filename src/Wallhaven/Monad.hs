@@ -1,30 +1,33 @@
 module Wallhaven.Monad
-  ( deleteWallpaper,
-    getDownloadedWallpapers,
-    CapabilityDeleteWallpaper,
-    CapabilityGetDownloadedWallpapers,
+  ( CapabilityDeleteWallpaper (..),
+    HasWallpaperDir (..),
+    CapabilityGetDownloadedWallpapers (..),
+    HasDebug (..),
+    HasDeleteUnliked (..),
+    HasLog (..),
+    CapabilityGetCollectionURLs (..),
   )
 where
 
-import Control.Monad.Reader (MonadReader, ReaderT, asks)
 import Types
-import UnliftIO (MonadIO)
-import qualified UnliftIO.Directory as Dir
+
+class HasDebug a where
+  getDebug :: a -> Bool
+
+class HasDeleteUnliked a where
+  getDeleteUnliked :: a -> Bool
+
+class HasLog a where
+  getLog :: a -> (String -> IO ())
+
+class HasWallpaperDir a where
+  getWallpaperDir :: a -> FilePath
 
 class CapabilityDeleteWallpaper m where
   deleteWallpaper :: WallpaperName -> m ()
 
-instance (MonadIO m) => CapabilityDeleteWallpaper (ReaderT env m) where
-  deleteWallpaper = Dir.removeFile
-
 class CapabilityGetDownloadedWallpapers m where
   getDownloadedWallpapers :: m [WallpaperName]
 
-instance
-  (MonadReader env m, HasWallpaperDir env, MonadIO m) =>
-  CapabilityGetDownloadedWallpapers (ReaderT env m)
-  where
-  getDownloadedWallpapers = asks getWallpaperDir >>= Dir.listDirectory
-
 class CapabilityGetCollectionURLs m where
-  getCollectionURLs :: m [FullWallpaperURL]
+  getCollectionURLs :: Username -> Label -> m [FullWallpaperURL]
