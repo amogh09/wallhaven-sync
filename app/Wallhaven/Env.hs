@@ -1,6 +1,7 @@
 module Wallhaven.Env (Env (..), Config (..), log, logLn) where
 
 import Control.Monad.Reader (MonadReader, Reader, ReaderT, asks, liftIO)
+import qualified Database.FileSystem.Action as DBFileSystem
 import qualified Network.HTTP.Simple as HTTP
 import qualified Retry
 import qualified Types
@@ -38,9 +39,6 @@ data Config = Config
     configDebug :: Bool
   }
 
-instance HasDebug Config where
-  getDebug = configDebug
-
 instance HasDebug Env where
   getDebug = configDebug . envConfig
 
@@ -56,7 +54,7 @@ instance HasLog Env where
 instance WallhavenAPI.HasNumParallelDownloads Env where
   getNumParallelDownloads = configNumParallelDownloads . envConfig
 
-instance HasWallpaperDir Env where
+instance DBFileSystem.HasWallpaperDir Env where
   getWallpaperDir = configWallpaperDir . envConfig
 
 instance Retry.HasRetryConfig Env where
@@ -71,6 +69,15 @@ instance
   where
   getCollectionURLs = WallhavenAPI.getAllCollectionURLs
 
+instance (MonadIO m) => CapabilityDeleteWallpaper (ReaderT Env m) where
+  deleteWallpaper = DBFileSystem.deleteWallpaper
+
+instance
+  (MonadIO m) =>
+  CapabilityGetDownloadedWallpapers (ReaderT Env m)
+  where
+  getDownloadedWallpapers = DBFileSystem.getWallpaperNames
+
 log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 log !msg = do
   logger <- asks getLog
@@ -79,12 +86,3 @@ log !msg = do
 
 logLn :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 logLn msg = log (msg <> "\n")
-
-instance (MonadIO m) => CapabilityDeleteWallpaper (ReaderT Env m) where
-  deleteWallpaper = Dir.removeFile
-
-instance
-  (MonadIO m) =>
-  CapabilityGetDownloadedWallpapers (ReaderT Env m)
-  where
-  getDownloadedWallpapers = asks getWallpaperDir >>= Dir.listDirectory
