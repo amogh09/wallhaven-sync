@@ -41,7 +41,7 @@ library wallhaven-sync-internal
     default-language:   Haskell2010
     default-extensions:
         TypeSynonymInstances BangPatterns OverloadedStrings
-        FlexibleInstances TupleSections
+        FlexibleInstances TupleSections ConstraintKinds
 
     ghc-options:        -Wall
     build-depends:

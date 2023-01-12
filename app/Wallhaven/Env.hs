@@ -59,18 +59,18 @@ instance MonadIO m => CapabilityHTTP (ReaderT Env m) where
 
 instance
   (MonadUnliftIO m) =>
-  CapabilityGetCollectionURLs (ReaderT Env m)
+  MonadGetCollectionURLs (ReaderT Env m)
   where
   getCollectionURLs = WallhavenAPI.getAllCollectionURLs
 
-instance (MonadIO m) => CapabilityDeleteWallpaper (ReaderT Env m) where
+instance (MonadIO m) => MonadDeleteWallpaper (ReaderT Env m) where
   deleteWallpaper = DBFileSystem.deleteWallpaper
 
-instance (MonadIO m) => CapabilitySaveWallpaper (ReaderT Env m) where
+instance (MonadIO m) => MonadSaveWallpaper (ReaderT Env m) where
   saveWallpaper = DBFileSystem.saveWallpaper
 
 instance
   (MonadIO m) =>
-  CapabilityGetDownloadedWallpapers (ReaderT Env m)
+  MonadGetDownloadedWallpapers (ReaderT Env m)
   where
   getDownloadedWallpapers = DBFileSystem.getWallpaperNames
