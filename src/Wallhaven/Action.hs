@@ -9,13 +9,13 @@ import Types (FullWallpaperURL, Label, LocalWallpapers, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
 import Util.Batch (batchedM)
-import Util.HTTP (CapabilityHTTP)
 import Wallhaven.API.Class (HasNumParallelDownloads, getNumParallelDownloads)
 import qualified Wallhaven.Exception as Exception
 import qualified Wallhaven.Logic as Logic
 import Wallhaven.Monad
   ( HasDeleteUnliked,
     HasLog,
+    MonadInitDB (initDB),
     MonadWallhaven,
     MonadWallpaperDB,
     deleteWallpaper,
@@ -38,18 +38,18 @@ logLn :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 logLn msg = log (msg <> "\n")
 
 type AppM env m =
-  ( HasDeleteUnliked env,
-    MonadReader env m,
+  ( MonadReader env m,
+    HasDeleteUnliked env,
     HasLog env,
     HasNumParallelDownloads env,
     MonadWallhaven m,
-    CapabilityHTTP m,
     MonadWallpaperDB m,
     MonadUnliftIO m
   )
 
 syncAllWallpapers :: AppM env m => Username -> Label -> m ()
 syncAllWallpapers username label = do
+  initDB
   fullURLs <- getCollectionURLs username label
   deleteUnliked <- asks getDeleteUnliked
   when deleteUnliked $ do
@@ -104,7 +104,7 @@ syncWallpapers urls = do
         )
       mapM_ log . fmap ((<> "\n") . displayException) $ exceptions
     else do
-      logLn "All wallpapers synced successfully.\n"
+      logLn "All wallpapers synced successfully."
 
 -- | Downloads the given wallpapers in batches of specified size.
 syncWallpapersInBatches ::

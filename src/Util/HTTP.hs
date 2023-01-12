@@ -1,10 +1,4 @@
-module Util.HTTP
-  ( httpBSWithRetry,
-    isTooManyRequestsException,
-    CapabilityHTTP,
-    httpBS,
-  )
-where
+module Util.HTTP (httpBSWithRetry, isTooManyRequestsException) where
 
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
@@ -14,31 +8,35 @@ import Network.HTTP.Client.Conduit
     responseStatus,
     setRequestCheckStatus,
   )
-import Network.HTTP.Simple (HttpException (..), Request)
+import Network.HTTP.Simple
+  ( HttpException (..),
+    Request,
+    getResponseBody,
+    httpBS,
+  )
 import Network.HTTP.Types (tooManyRequests429)
 import Retry (MaxAttempts, RetryDelayMicros, retryM)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (throwIO, try)
 
-class Monad m => CapabilityHTTP m where
-  httpBS :: Request -> m ByteString
-
 httpBSWithRetry ::
-  (CapabilityHTTP m, MonadUnliftIO m) =>
+  (MonadUnliftIO m) =>
   MaxAttempts ->
+  -- | Max HTTP attempts
   RetryDelayMicros ->
+  -- | Delay between HTTP attempts
   (HttpException -> Bool) ->
+  -- | Whether to retry on this exception
   Request ->
+  -- } HTTP request
   m ByteString
 httpBSWithRetry attempts delay shouldRetry req =
   retryM attempts delay (shouldRetryEither shouldRetry) (tryHttpBS req)
     >>= either throwIO pure
 
 tryHttpBS ::
-  (CapabilityHTTP m, MonadUnliftIO m) =>
-  Request ->
-  m (Either HttpException ByteString)
-tryHttpBS = try . httpBS . setRequestCheckStatus
+  (MonadUnliftIO m) => Request -> m (Either HttpException ByteString)
+tryHttpBS = try . fmap getResponseBody . httpBS . setRequestCheckStatus
 
 shouldRetryEither :: (HttpException -> Bool) -> Either HttpException a -> Bool
 shouldRetryEither shouldRetry = fromLeft False . first shouldRetry
