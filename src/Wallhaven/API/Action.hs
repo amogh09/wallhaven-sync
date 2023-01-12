@@ -11,7 +11,12 @@ import UnliftIO.Exception
 import Util.Batch (batchedM)
 import Util.HTTP (httpBSWithRetry, isTooManyRequestsException)
 import Util.Time (seconds)
-import Wallhaven.API.Class (HasNumParallelDownloads, HasWallhavenAPIKey, getNumParallelDownloads, getWallhavenAPIKey)
+import Wallhaven.API.Class
+  ( HasNumParallelDownloads,
+    HasWallhavenAPIKey,
+    getNumParallelDownloads,
+    getWallhavenAPIKey,
+  )
 import qualified Wallhaven.API.Exception as Exception
 import Wallhaven.API.Logic
   ( extractFullWallpaperURLs,
