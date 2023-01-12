@@ -5,22 +5,19 @@ import Control.Monad.Reader (MonadReader, asks)
 import Data.Bifunctor (first)
 import Data.Either (lefts)
 import qualified Network.HTTP.Simple as HTTP
-import qualified Retry
 import Types (FullWallpaperURL, Label, LocalWallpapers, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
 import Util.Batch (batchedM)
-import Util.HTTP (CapabilityHTTP, httpBSWithRetry, isTooManyRequestsException)
+import Util.HTTP (MonadHTTPRetry, httpBSWithRetry, isTooManyRequestsException)
 import Wallhaven.API.Class (HasNumParallelDownloads, getNumParallelDownloads)
 import qualified Wallhaven.Exception as Exception
 import qualified Wallhaven.Logic as Logic
 import Wallhaven.Monad
-  ( CapabilityDeleteWallpaper,
-    CapabilityGetCollectionURLs,
-    CapabilityGetDownloadedWallpapers,
-    CapabilitySaveWallpaper,
-    HasDeleteUnliked,
+  ( HasDeleteUnliked,
     HasLog,
+    MonadWallhaven,
+    MonadWallpaperDB,
     deleteWallpaper,
     getCollectionURLs,
     getDeleteUnliked,
@@ -39,23 +36,21 @@ log !msg = do
 logLn :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
 logLn msg = log (msg <> "\n")
 
-syncAllWallpapers ::
-  ( MonadReader env m,
+type AppM env m =
+  ( HasDeleteUnliked env,
     HasLog env,
-    CapabilityGetDownloadedWallpapers m,
-    CapabilityDeleteWallpaper m,
-    HasDeleteUnliked env,
-    CapabilityGetCollectionURLs m,
-    MonadUnliftIO m,
-    Retry.HasRetryConfig env,
-    CapabilityHTTP m,
-    Retry.CapabilityThreadDelay m,
     HasNumParallelDownloads env,
-    CapabilitySaveWallpaper m
-  ) =>
-  Username ->
-  Label ->
-  m ()
+    MonadWallhaven m,
+    MonadHTTPRetry env m,
+    MonadWallpaperDB m
+  )
+
+type MonadBatchedHTTP env m =
+  ( MonadHTTPRetry env m,
+    HasNumParallelDownloads env
+  )
+
+syncAllWallpapers :: AppM env m => Username -> Label -> m ()
 syncAllWallpapers username label = do
   fullURLs <- getCollectionURLs username label
   deleteUnliked <- asks getDeleteUnliked
@@ -68,12 +63,7 @@ syncAllWallpapers username label = do
 -- Deletes the local wallpapers that are not in the favorites anymore.
 -- Returns the wallpapers that were deleted.
 deleteUnlikedWallpapers ::
-  ( Monad m,
-    CapabilityGetDownloadedWallpapers m,
-    CapabilityDeleteWallpaper m
-  ) =>
-  [FullWallpaperURL] ->
-  m [WallpaperName]
+  MonadWallpaperDB m => [FullWallpaperURL] -> m [WallpaperName]
 deleteUnlikedWallpapers favURLs = do
   unliked <- Logic.unlikedWallpapers favURLs <$> getDownloadedWallpapers
   unless (null unliked) (mapM_ deleteWallpaper unliked)
@@ -82,15 +72,10 @@ deleteUnlikedWallpapers favURLs = do
 -- wallpaper directory. Skips any wallpapers that are already present.
 -- Displays a progress bar while downloading.
 syncWallpapers ::
-  ( MonadUnliftIO m,
-    MonadReader env m,
-    Retry.HasRetryConfig env,
+  ( MonadHTTPRetry env m,
     HasLog env,
-    CapabilityHTTP m,
-    Retry.CapabilityThreadDelay m,
     HasNumParallelDownloads env,
-    CapabilityGetDownloadedWallpapers m,
-    CapabilitySaveWallpaper m
+    MonadWallpaperDB m
   ) =>
   [FullWallpaperURL] ->
   m ()
@@ -123,16 +108,7 @@ syncWallpapers urls = do
 
 -- | Downloads the given wallpapers in batches of specified size.
 syncWallpapersInBatches ::
-  ( MonadReader env m,
-    HasNumParallelDownloads env,
-    Retry.HasRetryConfig env,
-    HasLog env,
-    Retry.CapabilityThreadDelay m,
-    CapabilityHTTP m,
-    CapabilitySaveWallpaper m,
-    MonadUnliftIO m,
-    CapabilityGetDownloadedWallpapers m
-  ) =>
+  (MonadBatchedHTTP env m, MonadWallpaperDB m) =>
   MVar Int ->
   [FullWallpaperURL] ->
   m [Either HTTP.HttpException ()]
@@ -147,13 +123,7 @@ syncWallpapersInBatches progressVar urls = do
 --  | Downloads a single wallpaper and saves it to the wallpaper directory.
 --  Updates the progress variable when done.
 syncWallpaper ::
-  ( MonadReader env m,
-    Retry.HasRetryConfig env,
-    Retry.CapabilityThreadDelay m,
-    CapabilityHTTP m,
-    CapabilitySaveWallpaper m,
-    MonadUnliftIO m
-  ) =>
+  (MonadBatchedHTTP env m, MonadWallpaperDB m) =>
   LocalWallpapers ->
   MVar Int ->
   FullWallpaperURL ->

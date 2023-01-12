@@ -3,6 +3,7 @@ module Util.HTTP
     isTooManyRequestsException,
     CapabilityHTTP,
     httpBS,
+    MonadHTTPRetry,
   )
 where
 
@@ -27,16 +28,16 @@ import UnliftIO.Exception (throwIO, try)
 class CapabilityHTTP m where
   httpBS :: Request -> m ByteString
 
-httpBSWithRetry ::
+type MonadHTTPRetry env m =
   ( CapabilityHTTP m,
+    MonadReader env m,
     Retry.HasRetryConfig env,
     Retry.CapabilityThreadDelay m,
-    MonadUnliftIO m,
-    MonadReader env m
-  ) =>
-  (HttpException -> Bool) ->
-  Request ->
-  m ByteString
+    MonadUnliftIO m
+  )
+
+httpBSWithRetry ::
+  MonadHTTPRetry env m => (HttpException -> Bool) -> Request -> m ByteString
 httpBSWithRetry shouldRetry req = do
   res <-
     Retry.retryM (fromLeft False . first shouldRetry)

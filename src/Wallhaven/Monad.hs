@@ -1,11 +1,13 @@
 module Wallhaven.Monad
-  ( CapabilityDeleteWallpaper (..),
-    CapabilityGetDownloadedWallpapers (..),
+  ( MonadDeleteWallpaper (..),
+    MonadGetDownloadedWallpapers (..),
     HasDebug (..),
     HasDeleteUnliked (..),
     HasLog (..),
-    CapabilityGetCollectionURLs (..),
-    CapabilitySaveWallpaper (..),
+    MonadGetCollectionURLs (..),
+    MonadSaveWallpaper (..),
+    MonadWallpaperDB,
+    MonadWallhaven,
   )
 where
 
@@ -21,14 +23,24 @@ class HasDeleteUnliked a where
 class HasLog a where
   getLog :: a -> (String -> IO ())
 
-class CapabilityDeleteWallpaper m where
+-- | Monad for interacting with a database for wallpapers.
+type MonadWallpaperDB m =
+  ( MonadDeleteWallpaper m,
+    MonadGetDownloadedWallpapers m,
+    MonadSaveWallpaper m
+  )
+
+-- | Monad for interacting with Wallhaven.
+type MonadWallhaven m = MonadGetCollectionURLs m
+
+class Monad m => MonadDeleteWallpaper m where
   deleteWallpaper :: WallpaperName -> m ()
 
-class CapabilityGetDownloadedWallpapers m where
+class Monad m => MonadGetDownloadedWallpapers m where
   getDownloadedWallpapers :: m [WallpaperName]
 
-class CapabilitySaveWallpaper m where
+class Monad m => MonadSaveWallpaper m where
   saveWallpaper :: WallpaperName -> ByteString -> m ()
 
-class CapabilityGetCollectionURLs m where
+class Monad m => MonadGetCollectionURLs m where
   getCollectionURLs :: Username -> Label -> m [FullWallpaperURL]
