@@ -94,7 +94,6 @@ test-suite spec
         Wallhaven.LogicSpec
         Wallhaven.ActionSpec
         RetrySpec
-        Util.HTTPSpec
         Util.Gen
 
         Wallhaven.API.TypesSpec

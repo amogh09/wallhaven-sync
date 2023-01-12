@@ -1,9 +1,9 @@
-module Wallhaven.Env (Env (..), Config (..)) where
+module Wallhaven.Env (Env (..), Config (..), RetryConfig (..)) where
 
 import Control.Monad.Reader (ReaderT)
 import qualified Database.FileSystem.Action as DBFileSystem
 import qualified Network.HTTP.Simple as HTTP
-import qualified Retry
+import Retry (MaxAttempts, RetryDelayMicros)
 import qualified Types
 import UnliftIO (MonadIO, MonadUnliftIO)
 import Util.HTTP (CapabilityHTTP, httpBS)
@@ -24,13 +24,18 @@ data Config = Config
     -- | The number of wallpapers to download in parallel.
     configNumParallelDownloads :: Types.NumParallelDownloads,
     -- | Retry config for HTTP requests.
-    configRetryConfig :: Retry.RetryConfig,
+    configRetryConfig :: RetryConfig,
     -- | Whether to delete unliked wallpapers.
     configDeleteUnliked :: Bool,
     -- | Wallhaven API Key
     configWallhavenAPIKey :: String,
     -- | Debug mode
     configDebug :: Bool
+  }
+
+data RetryConfig = RetryConfig
+  { maxAttempts :: MaxAttempts,
+    retryDelayMicros :: RetryDelayMicros
   }
 
 instance HasDebug Env where
@@ -51,17 +56,14 @@ instance WallhavenAPI.HasNumParallelDownloads Env where
 instance DBFileSystem.HasWallpaperDir Env where
   getWallpaperDir = configWallpaperDir . envConfig
 
-instance Retry.HasRetryConfig Env where
-  getRetryConfig = configRetryConfig . envConfig
-
 instance MonadIO m => CapabilityHTTP (ReaderT Env m) where
   httpBS = fmap HTTP.getResponseBody . HTTP.httpBS
 
-instance
-  (MonadUnliftIO m) =>
-  MonadGetCollectionURLs (ReaderT Env m)
-  where
+instance (MonadUnliftIO m) => MonadGetCollectionURLs (ReaderT Env m) where
   getCollectionURLs = WallhavenAPI.getAllCollectionURLs
+
+instance MonadUnliftIO m => MonadGetFullWallpaper (ReaderT Env m) where
+  getFullWallpaper = WallhavenAPI.getFullWallpaper
 
 instance (MonadIO m) => MonadDeleteWallpaper (ReaderT Env m) where
   deleteWallpaper = DBFileSystem.deleteWallpaper
