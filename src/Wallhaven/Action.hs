@@ -9,7 +9,7 @@ import Types (FullWallpaperURL, Label, LocalWallpapers, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
 import Util.Batch (batchedM)
-import Util.HTTP (MonadHTTPRetry, httpBSWithRetry, isTooManyRequestsException)
+import Util.HTTP (CapabilityHTTP)
 import Wallhaven.API.Class (HasNumParallelDownloads, getNumParallelDownloads)
 import qualified Wallhaven.Exception as Exception
 import qualified Wallhaven.Logic as Logic
@@ -22,6 +22,7 @@ import Wallhaven.Monad
     getCollectionURLs,
     getDeleteUnliked,
     getDownloadedWallpapers,
+    getFullWallpaper,
     getLog,
     saveWallpaper,
   )
@@ -38,16 +39,13 @@ logLn msg = log (msg <> "\n")
 
 type AppM env m =
   ( HasDeleteUnliked env,
+    MonadReader env m,
     HasLog env,
     HasNumParallelDownloads env,
     MonadWallhaven m,
-    MonadHTTPRetry env m,
-    MonadWallpaperDB m
-  )
-
-type MonadBatchedHTTP env m =
-  ( MonadHTTPRetry env m,
-    HasNumParallelDownloads env
+    CapabilityHTTP m,
+    MonadWallpaperDB m,
+    MonadUnliftIO m
   )
 
 syncAllWallpapers :: AppM env m => Username -> Label -> m ()
@@ -72,10 +70,12 @@ deleteUnlikedWallpapers favURLs = do
 -- wallpaper directory. Skips any wallpapers that are already present.
 -- Displays a progress bar while downloading.
 syncWallpapers ::
-  ( MonadHTTPRetry env m,
+  ( MonadReader env m,
     HasLog env,
     HasNumParallelDownloads env,
-    MonadWallpaperDB m
+    MonadWallhaven m,
+    MonadWallpaperDB m,
+    MonadUnliftIO m
   ) =>
   [FullWallpaperURL] ->
   m ()
@@ -108,7 +108,12 @@ syncWallpapers urls = do
 
 -- | Downloads the given wallpapers in batches of specified size.
 syncWallpapersInBatches ::
-  (MonadBatchedHTTP env m, MonadWallpaperDB m) =>
+  ( MonadReader env m,
+    MonadWallhaven m,
+    MonadWallpaperDB m,
+    MonadUnliftIO m,
+    HasNumParallelDownloads env
+  ) =>
   MVar Int ->
   [FullWallpaperURL] ->
   m [Either HTTP.HttpException ()]
@@ -123,7 +128,11 @@ syncWallpapersInBatches progressVar urls = do
 --  | Downloads a single wallpaper and saves it to the wallpaper directory.
 --  Updates the progress variable when done.
 syncWallpaper ::
-  (MonadBatchedHTTP env m, MonadWallpaperDB m) =>
+  ( MonadReader env m,
+    MonadWallhaven m,
+    MonadWallpaperDB m,
+    MonadUnliftIO m
+  ) =>
   LocalWallpapers ->
   MVar Int ->
   FullWallpaperURL ->
@@ -131,7 +140,7 @@ syncWallpaper ::
 syncWallpaper localWallpapers progressVar url = do
   unless
     (Logic.wallpaperName url `elem` localWallpapers)
-    ( httpBSWithRetry isTooManyRequestsException (HTTP.parseRequest_ url)
+    ( getFullWallpaper url
         >>= saveWallpaper (Logic.wallpaperName url)
     )
   modifyMVar_ progressVar (evaluate . (+ 1))

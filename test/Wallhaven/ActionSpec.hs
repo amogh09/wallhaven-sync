@@ -9,7 +9,7 @@ import Test.QuickCheck.Property (forAll)
 import Types (WallpaperName)
 import Util.Gen (alpha)
 import Wallhaven.Action (deleteUnlikedWallpapers)
-import Wallhaven.Monad (CapabilityDeleteWallpaper, CapabilityGetDownloadedWallpapers, deleteWallpaper, getDownloadedWallpapers)
+import Wallhaven.Monad (MonadDeleteWallpaper, MonadGetDownloadedWallpapers, MonadSaveWallpaper, deleteWallpaper, getDownloadedWallpapers, saveWallpaper)
 
 newtype TestActionM a = TestActionM
   { unTestActionM :: State [WallpaperName] a
@@ -20,11 +20,14 @@ runTestActionM ::
   TestActionM a -> [WallpaperName] -> (a, [WallpaperName])
 runTestActionM = runState . unTestActionM
 
-instance CapabilityGetDownloadedWallpapers TestActionM where
+instance MonadGetDownloadedWallpapers TestActionM where
   getDownloadedWallpapers = get
 
-instance CapabilityDeleteWallpaper TestActionM where
+instance MonadDeleteWallpaper TestActionM where
   deleteWallpaper w = modify (List.delete w)
+
+instance MonadSaveWallpaper TestActionM where
+  saveWallpaper w _ = modify (w :)
 
 deleteUnlikedWallpapersGen ::
   Gen ([WallpaperName], [WallpaperName], [WallpaperName])
