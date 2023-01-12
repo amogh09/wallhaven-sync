@@ -3,9 +3,8 @@ module Wallhaven.CLI (runCLIApp) where
 import Control.Monad.Reader (ReaderT (runReaderT))
 import Options.Applicative
 import Types
-import Util.Time (seconds)
 import Wallhaven.Action (syncAllWallpapers)
-import Wallhaven.Env (Config (Config), Env (Env), RetryConfig (RetryConfig))
+import Wallhaven.Env (Config (Config), Env (Env))
 
 defaultWallpaperDir :: FilePath
 defaultWallpaperDir = "/Users/home/wallpapers"
@@ -53,15 +52,11 @@ cliOptsParser =
 defaultParallelization :: NumParallelDownloads
 defaultParallelization = 5
 
-defaultRetryConfig :: RetryConfig
-defaultRetryConfig = RetryConfig 5 (seconds 3)
-
 cliOptsToConfig :: CLIOpts -> Config
 cliOptsToConfig opts =
   Config
     (cliOptsWallpaperDir opts)
     defaultParallelization
-    defaultRetryConfig
     (cliOptsDeleteUnliked opts)
     (cliOptsWallhavenAPIKey opts)
     (cliOptsDebug opts)

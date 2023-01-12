@@ -9,7 +9,7 @@ import Types
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception
 import Util.Batch (batchedM)
-import Util.HTTP (CapabilityHTTP, httpBSWithRetry, isTooManyRequestsException)
+import Util.HTTP (httpBSWithRetry, isTooManyRequestsException)
 import Util.Time (seconds)
 import Wallhaven.API.Class (HasNumParallelDownloads, HasWallhavenAPIKey, getNumParallelDownloads, getWallhavenAPIKey)
 import qualified Wallhaven.API.Exception as Exception
@@ -25,8 +25,7 @@ getAllCollectionURLs ::
   ( MonadUnliftIO m,
     MonadReader env m,
     HasWallhavenAPIKey env,
-    HasNumParallelDownloads env,
-    CapabilityHTTP m
+    HasNumParallelDownloads env
   ) =>
   Username ->
   Label ->
@@ -45,8 +44,7 @@ getAllCollectionURLs username collectionLabel = do
 getCollectionWallpaperURLsForPage ::
   ( MonadReader env m,
     HasWallhavenAPIKey env,
-    MonadUnliftIO m,
-    CapabilityHTTP m
+    MonadUnliftIO m
   ) =>
   Username ->
   CollectionID ->
@@ -56,7 +54,7 @@ getCollectionWallpaperURLsForPage username cid page = do
   apiKey <- asks getWallhavenAPIKey
   let req = wallhavenCollectionPageRequest username apiKey cid page
   catch
-    ( apiCall req
+    ( httpCall req
         >>= fromEither
           . first Exception.WallpapersParseException
           . extractFullWallpaperURLs
@@ -67,8 +65,7 @@ getCollectionWallpaperURLsForPage username cid page = do
 getWallpapersLastPage ::
   ( MonadReader env m,
     MonadUnliftIO m,
-    HasWallhavenAPIKey env,
-    CapabilityHTTP m
+    HasWallhavenAPIKey env
   ) =>
   Username ->
   CollectionID ->
@@ -77,7 +74,7 @@ getWallpapersLastPage username cid = do
   apiKey <- asks getWallhavenAPIKey
   let req = wallhavenCollectionPageRequest username apiKey cid 1
   catch
-    ( apiCall req
+    ( httpCall req
         >>= fromEither
           . first Exception.WallhavenMetaParseException
           . extractWallhavenMetaLastPage
@@ -88,8 +85,7 @@ getWallpapersLastPage username cid = do
 getCollectionID ::
   ( MonadReader env m,
     HasWallhavenAPIKey env,
-    MonadUnliftIO m,
-    CapabilityHTTP m
+    MonadUnliftIO m
   ) =>
   Username ->
   Label ->
@@ -98,27 +94,24 @@ getCollectionID username label = do
   apiKey <- asks getWallhavenAPIKey
   let req = wallhavenCollectionsRequest username apiKey
   catch
-    (apiCall req >>= fromEither . parseCollectionID label)
+    (httpCall req >>= fromEither . parseCollectionID label)
     (throwIO . Exception.CollectionsFetchException)
 
-getFullWallpaper ::
-  ( MonadUnliftIO m,
-    CapabilityHTTP m
-  ) =>
-  FullWallpaperURL ->
-  m ByteString
-getFullWallpaper = apiCall . parseRequest_
+getFullWallpaper :: (MonadUnliftIO m) => FullWallpaperURL -> m ByteString
+getFullWallpaper = httpCall . parseRequest_
 
 -- | A sensible default for max API call attempts.
-defaultAPICallMaxAttempts :: Retry.MaxAttempts
-defaultAPICallMaxAttempts = 5
+defaultHTTPMaxAttempts :: Retry.MaxAttempts
+defaultHTTPMaxAttempts = 5
 
-defaultAPICallRetryDelayMicros :: Retry.RetryDelayMicros
-defaultAPICallRetryDelayMicros = seconds 3
+-- | A sensible default for HTTP call retry delay.
+defaultHTTPRetryDelayMicros :: Retry.RetryDelayMicros
+defaultHTTPRetryDelayMicros = seconds 3
 
-apiCall :: (CapabilityHTTP m, MonadUnliftIO m) => Request -> m ByteString
-apiCall =
+-- | Makes HTTP calls with retries.
+httpCall :: (MonadUnliftIO m) => Request -> m ByteString
+httpCall =
   httpBSWithRetry
-    defaultAPICallMaxAttempts
-    defaultAPICallRetryDelayMicros
+    defaultHTTPMaxAttempts
+    defaultHTTPRetryDelayMicros
     isTooManyRequestsException

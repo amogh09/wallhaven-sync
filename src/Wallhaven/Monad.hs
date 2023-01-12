@@ -1,6 +1,7 @@
 module Wallhaven.Monad
   ( MonadDeleteWallpaper (..),
     MonadGetDownloadedWallpapers (..),
+    MonadInitDB (..),
     HasDebug (..),
     HasDeleteUnliked (..),
     HasLog (..),
@@ -28,11 +29,15 @@ class HasLog a where
 type MonadWallpaperDB m =
   ( MonadDeleteWallpaper m,
     MonadGetDownloadedWallpapers m,
-    MonadSaveWallpaper m
+    MonadSaveWallpaper m,
+    MonadInitDB m
   )
 
 -- | Monad for interacting with Wallhaven.
 type MonadWallhaven m = (MonadGetCollectionURLs m, MonadGetFullWallpaper m)
+
+class Monad m => MonadInitDB m where
+  initDB :: m ()
 
 class Monad m => MonadDeleteWallpaper m where
   deleteWallpaper :: WallpaperName -> m ()
