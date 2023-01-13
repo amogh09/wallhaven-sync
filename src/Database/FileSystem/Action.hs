@@ -23,40 +23,27 @@ import UnliftIO.IO.File (writeBinaryFile)
 class HasWallpaperDir a where
   getWallpaperDir :: a -> FilePath
 
-createWallpaperDir ::
-  (MonadIO m, MonadReader env m, HasWallpaperDir env) => m ()
-createWallpaperDir =
-  asks getWallpaperDir >>= liftIO . createDirectoryIfMissing True
-
-deleteWallpaper ::
+type DatabaseM env m =
   ( MonadReader env m,
     HasWallpaperDir env,
     MonadIO m
-  ) =>
-  WallpaperName ->
-  m ()
+  )
+
+createWallpaperDir :: DatabaseM env m => m ()
+createWallpaperDir =
+  asks getWallpaperDir >>= liftIO . createDirectoryIfMissing True
+
+deleteWallpaper :: DatabaseM env m => WallpaperName -> m ()
 deleteWallpaper name = do
   dir <- asks getWallpaperDir
   let path = dir </> name
   exists <- doesFileExist path
   when exists $ removeFile path
 
-getWallpaperNames ::
-  ( MonadReader env m,
-    HasWallpaperDir env,
-    MonadIO m
-  ) =>
-  m [WallpaperName]
+getWallpaperNames :: DatabaseM env m => m [WallpaperName]
 getWallpaperNames = asks getWallpaperDir >>= listDirectory
 
-saveWallpaper ::
-  ( MonadReader env m,
-    HasWallpaperDir env,
-    MonadIO m
-  ) =>
-  WallpaperName ->
-  ByteString ->
-  m ()
+saveWallpaper :: DatabaseM env m => WallpaperName -> ByteString -> m ()
 saveWallpaper name wallpaper = do
   dir <- asks getWallpaperDir
   writeBinaryFile (dir </> name) wallpaper
