@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
-
 module Wallhaven.Action (deleteUnlikedWallpapers, syncAllWallpapers) where
 
 import Control.Monad (forever, unless, when)
