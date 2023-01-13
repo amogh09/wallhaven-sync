@@ -9,7 +9,16 @@ import Test.QuickCheck.Property (forAll)
 import Types (WallpaperName)
 import Util.Gen (alpha)
 import Wallhaven.Action (deleteUnlikedWallpapers)
-import Wallhaven.Monad (MonadDeleteWallpaper, MonadGetDownloadedWallpapers, MonadSaveWallpaper, deleteWallpaper, getDownloadedWallpapers, saveWallpaper)
+import Wallhaven.Monad
+  ( MonadDeleteWallpaper,
+    MonadGetDownloadedWallpapers,
+    MonadInitDB,
+    MonadSaveWallpaper,
+    deleteWallpaper,
+    getDownloadedWallpapers,
+    initDB,
+    saveWallpaper,
+  )
 
 newtype TestActionM a = TestActionM
   { unTestActionM :: State [WallpaperName] a
@@ -29,6 +38,9 @@ instance MonadDeleteWallpaper TestActionM where
 instance MonadSaveWallpaper TestActionM where
   saveWallpaper w _ = modify (w :)
 
+instance MonadInitDB TestActionM where
+  initDB = pure ()
+
 deleteUnlikedWallpapersGen ::
   Gen ([WallpaperName], [WallpaperName], [WallpaperName])
 deleteUnlikedWallpapersGen = do
@@ -40,14 +52,12 @@ deleteUnlikedWallpapersGen = do
 prop_deleteUnlikedWallpapers :: Property
 prop_deleteUnlikedWallpapers =
   forAll deleteUnlikedWallpapersGen $ \(downloaded, liked, unliked) -> do
-    let urls = fmap toFullURL liked
-        (unliked', downloaded') =
-          runTestActionM (deleteUnlikedWallpapers urls) downloaded
+    let (unliked', downloaded') =
+          runTestActionM
+            (deleteUnlikedWallpapers downloaded liked)
+            downloaded
     downloaded' `shouldBe` (liked `List.intersect` downloaded)
     unliked' `shouldBe` (unliked `List.intersect` downloaded)
-
-toFullURL :: WallpaperName -> String
-toFullURL = ("https://w.wallhaven.cc/full/l8/" <>)
 
 spec :: Spec
 spec = do

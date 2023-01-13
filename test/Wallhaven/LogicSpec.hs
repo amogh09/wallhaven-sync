@@ -1,12 +1,10 @@
 module Wallhaven.LogicSpec (spec) where
 
-import Data.List as List
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck
 import Types
-import Wallhaven.Logic (unlikedWallpapers, wallpaperName)
-import Util.Gen (alpha)
+import Wallhaven.Logic (wallpaperName)
 
 prefixExtPathGen :: Gen (String, WallpaperName)
 prefixExtPathGen = do
@@ -44,33 +42,6 @@ prop_wallpaperName_no_name =
     forAll arbitrary $ \prefix ->
       wallpaperName (prefix <> "/." <> extension) `shouldBe` "." <> extension
 
-fullWallpaperURL :: String -> String
-fullWallpaperURL name = "https://w.wallhaven.cc/full/2y/" <> name <> ".jpg"
-
-localWallpaperFromName :: String -> Gen WallpaperPath
-localWallpaperFromName name = do
-  prefixBits <- listOf1 alpha
-  return $ List.intercalate "/" prefixBits <> "/" <> name <> ".jpg"
-
-unlikedWallpapersGen :: Gen ([FullWallpaperURL], LocalWallpapers, LocalWallpapers)
-unlikedWallpapersGen = do
-  favNames <- listOf1 alpha
-  let favFullURLs = map fullWallpaperURL favNames
-  syncedLocalWallpapers <- sublistOf favNames >>= mapM localWallpaperFromName
-  unlikedLocalWallpapers <-
-    listOf1 alpha
-      >>= mapM localWallpaperFromName . filter (not . flip elem favNames)
-  return
-    ( favFullURLs,
-      syncedLocalWallpapers ++ unlikedLocalWallpapers,
-      unlikedLocalWallpapers
-    )
-
-prop_unliked_wallpapers :: Property
-prop_unliked_wallpapers = forAll unlikedWallpapersGen $
-  \(favFullURLs, allLocal, unliked) ->
-    unlikedWallpapers favFullURLs allLocal `shouldBe` unliked
-
 spec :: Spec
 spec = do
   describe "Util.Wallhaven" $ do
@@ -90,6 +61,3 @@ spec = do
       prop
         "should return empty string if no name exists"
         prop_wallpaperName_no_name
-
-    describe "unlikedWallpapers" $ do
-      prop "should return unliked wallpapers" prop_unliked_wallpapers
