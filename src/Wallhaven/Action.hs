@@ -47,43 +47,49 @@ type AppM env m =
     MonadUnliftIO m
   )
 
+-- | Main function. Syncs the specified collection.
 syncAllWallpapers :: AppM env m => Username -> Label -> m ()
 syncAllWallpapers username label = do
   initDB
   urls <- getCollectionURLs username label
   let names = fmap wallpaperName urls
+  downloaded <- getDownloadedWallpapers
   deleteUnliked <- asks getDeleteUnliked
   when deleteUnliked $ do
-    unliked <- deleteUnlikedWallpapers names
-    logLn "Following wallpapers were unliked and deleted:"
+    unliked <- deleteUnlikedWallpapers downloaded names
+    logLn "Following wallpapers were found to be unliked and so were deleted:"
     mapM_ logLn unliked
-  syncWallpapers $ names `zip` urls
+  syncWallpapers downloaded $ names `zip` urls
   logLn "\nAll wallpapers synced successfully."
 
-syncWallpapers :: AppM env m => [(WallpaperName, FullWallpaperURL)] -> m ()
-syncWallpapers wallpapers = do
+-- | Syncs the provided wallpapers with the database.
+syncWallpapers ::
+  AppM env m => [WallpaperName] -> [(WallpaperName, FullWallpaperURL)] -> m ()
+syncWallpapers downloaded wallpapers = do
   progressVar <- newMVar 0
   withAsync
     ( forever $ do
         printProgressBar progressVar (length wallpapers)
         threadDelay 100000
     )
-    (const $ mapM_ (uncurry $ syncWallpaper progressVar) wallpapers)
+    (const $ mapM_ (uncurry $ syncWallpaper progressVar downloaded) wallpapers)
   printProgressBar progressVar (length wallpapers)
 
+-- | Syncs a single wallpaper. Skips downloading if the wallpaper is already
+-- downloaded. Downloads and saves the wallpaper otherwise.
 syncWallpaper ::
-  AppM env m => MVar Int -> WallpaperName -> FullWallpaperURL -> m ()
-syncWallpaper progressVar name url = do
-  wallpaper <- downloadWallpaper url
-  saveWallpaper name wallpaper
+  AppM env m => MVar Int -> [WallpaperName] -> WallpaperName -> FullWallpaperURL -> m ()
+syncWallpaper progressVar downloaded name url = do
+  unless (name `elem` downloaded) $ do
+    wallpaper <- downloadWallpaper url
+    saveWallpaper name wallpaper
   modifyMVar_ progressVar (evaluate . (+ 1))
 
 -- Deletes the local wallpapers that are not in the favorites anymore.
 -- Returns the wallpapers that were deleted.
 deleteUnlikedWallpapers ::
-  MonadWallpaperDB m => [WallpaperName] -> m [WallpaperName]
-deleteUnlikedWallpapers liked = do
-  downloaded <- getDownloadedWallpapers
+  MonadWallpaperDB m => [WallpaperName] -> [WallpaperName] -> m [WallpaperName]
+deleteUnlikedWallpapers downloaded liked = do
   let unliked = downloaded List.\\ liked -- TODO: optimize this
   unless (null unliked) (mapM_ deleteWallpaper unliked)
   return unliked
