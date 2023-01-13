@@ -6,7 +6,6 @@ import qualified Data.List as List
 import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
-import Wallhaven.API.Class (HasNumParallelDownloads)
 import Wallhaven.Logic (wallpaperName)
 import Wallhaven.Monad
   ( HasDeleteUnliked,
@@ -38,7 +37,6 @@ type AppM env m =
   ( MonadReader env m,
     HasDeleteUnliked env,
     HasLog env,
-    HasNumParallelDownloads env,
     MonadWallhaven m,
     MonadWallpaperDB m,
     MonadDownloadWallpaper m,

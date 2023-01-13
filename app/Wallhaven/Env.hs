@@ -9,7 +9,6 @@ import UnliftIO (MonadIO, MonadUnliftIO)
 import qualified Util.HTTP as HTTP
 import Util.Time (seconds)
 import qualified Wallhaven.API.Action as WallhavenAPI
-import qualified Wallhaven.API.Class as WallhavenAPI
 import Wallhaven.Monad
 import Prelude hiding (log)
 
@@ -41,20 +40,16 @@ defaultDelay = seconds 3
 instance HasDebug Env where
   getDebug = configDebug . envConfig
 
-instance WallhavenAPI.HasWallhavenAPIKey Env where
-  getWallhavenAPIKey = configWallhavenAPIKey . envConfig
-
 instance HasDeleteUnliked Env where
   getDeleteUnliked = configDeleteUnliked . envConfig
 
 instance HasLog Env where
   getLog = envLog
 
-instance WallhavenAPI.HasNumParallelDownloads Env where
-  getNumParallelDownloads = configNumParallelDownloads . envConfig
-
 instance (MonadUnliftIO m) => MonadGetCollectionURLs (ReaderT Env m) where
-  getCollectionURLs = WallhavenAPI.getAllCollectionURLs
+  getCollectionURLs username label = do
+    apiKey <- asks (configWallhavenAPIKey . envConfig)
+    WallhavenAPI.getAllCollectionURLs apiKey username label
 
 instance MonadUnliftIO m => MonadGetFullWallpaper (ReaderT Env m) where
   getFullWallpaper = WallhavenAPI.getFullWallpaper
