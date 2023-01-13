@@ -2,8 +2,12 @@ module Wallhaven.Env (Env (..), Config (..)) where
 
 import Control.Monad.Reader (ReaderT)
 import qualified Database.FileSystem.Action as DBFileSystem
+import qualified Network.HTTP.Simple as HTTP
+import qualified Retry
 import qualified Types
 import UnliftIO (MonadIO, MonadUnliftIO)
+import qualified Util.HTTP as HTTP
+import Util.Time (seconds)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import qualified Wallhaven.API.Class as WallhavenAPI
 import Wallhaven.Monad
@@ -28,6 +32,12 @@ data Config = Config
     configDebug :: Bool
   }
 
+defaultMaxAttempts :: Retry.MaxAttempts
+defaultMaxAttempts = 5
+
+defaultDelay :: Retry.RetryDelayMicros
+defaultDelay = seconds 3
+
 instance HasDebug Env where
   getDebug = configDebug . envConfig
 
@@ -51,6 +61,14 @@ instance (MonadUnliftIO m) => MonadGetCollectionURLs (ReaderT Env m) where
 
 instance MonadUnliftIO m => MonadGetFullWallpaper (ReaderT Env m) where
   getFullWallpaper = WallhavenAPI.getFullWallpaper
+
+instance MonadUnliftIO m => MonadDownloadWallpaper (ReaderT Env m) where
+  downloadWallpaper =
+    HTTP.httpBSWithRetry
+      defaultMaxAttempts
+      defaultDelay
+      HTTP.isTooManyRequestsException
+      . HTTP.parseRequest_
 
 instance (MonadIO m) => MonadDeleteWallpaper (ReaderT Env m) where
   deleteWallpaper = DBFileSystem.deleteWallpaper

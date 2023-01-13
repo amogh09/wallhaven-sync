@@ -1,28 +1,27 @@
+{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
+
 module Wallhaven.Action (deleteUnlikedWallpapers, syncAllWallpapers) where
 
 import Control.Monad (forever, unless, when)
 import Control.Monad.Reader (MonadReader, asks)
-import Data.Bifunctor (first)
-import Data.Either (lefts)
-import qualified Network.HTTP.Simple as HTTP
-import Types (FullWallpaperURL, Label, LocalWallpapers, Username, WallpaperName)
+import qualified Data.List as List
+import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
-import Util.Batch (batchedM)
-import Wallhaven.API.Class (HasNumParallelDownloads, getNumParallelDownloads)
-import qualified Wallhaven.Exception as Exception
-import qualified Wallhaven.Logic as Logic
+import Wallhaven.API.Class (HasNumParallelDownloads)
+import Wallhaven.Logic (wallpaperName)
 import Wallhaven.Monad
   ( HasDeleteUnliked,
     HasLog,
+    MonadDownloadWallpaper,
     MonadInitDB (initDB),
     MonadWallhaven,
     MonadWallpaperDB,
     deleteWallpaper,
+    downloadWallpaper,
     getCollectionURLs,
     getDeleteUnliked,
     getDownloadedWallpapers,
-    getFullWallpaper,
     getLog,
     saveWallpaper,
   )
@@ -44,106 +43,50 @@ type AppM env m =
     HasNumParallelDownloads env,
     MonadWallhaven m,
     MonadWallpaperDB m,
+    MonadDownloadWallpaper m,
     MonadUnliftIO m
   )
 
 syncAllWallpapers :: AppM env m => Username -> Label -> m ()
 syncAllWallpapers username label = do
   initDB
-  fullURLs <- getCollectionURLs username label
+  urls <- getCollectionURLs username label
+  let names = fmap wallpaperName urls
   deleteUnliked <- asks getDeleteUnliked
   when deleteUnliked $ do
-    unliked <- deleteUnlikedWallpapers fullURLs
+    unliked <- deleteUnlikedWallpapers names
     logLn "Following wallpapers were unliked and deleted:"
     mapM_ logLn unliked
-  syncWallpapers fullURLs
+  syncWallpapers $ names `zip` urls
+  logLn "\nAll wallpapers synced successfully."
+
+syncWallpapers :: AppM env m => [(WallpaperName, FullWallpaperURL)] -> m ()
+syncWallpapers wallpapers = do
+  progressVar <- newMVar 0
+  withAsync
+    ( forever $ do
+        printProgressBar progressVar (length wallpapers)
+        threadDelay 100000
+    )
+    (const $ mapM_ (uncurry $ syncWallpaper progressVar) wallpapers)
+  printProgressBar progressVar (length wallpapers)
+
+syncWallpaper ::
+  AppM env m => MVar Int -> WallpaperName -> FullWallpaperURL -> m ()
+syncWallpaper progressVar name url = do
+  wallpaper <- downloadWallpaper url
+  saveWallpaper name wallpaper
+  modifyMVar_ progressVar (evaluate . (+ 1))
 
 -- Deletes the local wallpapers that are not in the favorites anymore.
 -- Returns the wallpapers that were deleted.
 deleteUnlikedWallpapers ::
-  MonadWallpaperDB m => [FullWallpaperURL] -> m [WallpaperName]
-deleteUnlikedWallpapers favURLs = do
-  unliked <- Logic.unlikedWallpapers favURLs <$> getDownloadedWallpapers
+  MonadWallpaperDB m => [WallpaperName] -> m [WallpaperName]
+deleteUnlikedWallpapers liked = do
+  downloaded <- getDownloadedWallpapers
+  let unliked = downloaded List.\\ liked -- TODO: optimize this
   unless (null unliked) (mapM_ deleteWallpaper unliked)
   return unliked
-
--- wallpaper directory. Skips any wallpapers that are already present.
--- Displays a progress bar while downloading.
-syncWallpapers ::
-  ( MonadReader env m,
-    HasLog env,
-    HasNumParallelDownloads env,
-    MonadWallhaven m,
-    MonadWallpaperDB m,
-    MonadUnliftIO m
-  ) =>
-  [FullWallpaperURL] ->
-  m ()
-syncWallpapers urls = do
-  progressVar <- newMVar 0 -- to be updated by threads downloading individual wallpapers.
-  results <-
-    withAsync
-      ( forever $ do
-          printProgressBar progressVar (length urls)
-          threadDelay 100000
-      )
-      (const $ syncWallpapersInBatches progressVar urls)
-  printProgressBar progressVar (length urls)
-  logLn ""
-  let exceptions =
-        fmap (uncurry Exception.WallpaperDownloadException)
-          . lefts
-          . zipWith (\url res -> first (url,) res) urls
-          $ results
-  if not (null exceptions)
-    then do
-      logLn
-        ( "Failed to sync the following "
-            <> show (length exceptions)
-            <> " wallpapers.\n"
-        )
-      mapM_ log . fmap ((<> "\n") . displayException) $ exceptions
-    else do
-      logLn "All wallpapers synced successfully."
-
--- | Downloads the given wallpapers in batches of specified size.
-syncWallpapersInBatches ::
-  ( MonadReader env m,
-    MonadWallhaven m,
-    MonadWallpaperDB m,
-    MonadUnliftIO m,
-    HasNumParallelDownloads env
-  ) =>
-  MVar Int ->
-  [FullWallpaperURL] ->
-  m [Either HTTP.HttpException ()]
-syncWallpapersInBatches progressVar urls = do
-  localWallpapers <- getDownloadedWallpapers
-  parallelDownloads <- asks getNumParallelDownloads
-  batchedM
-    parallelDownloads
-    (try . syncWallpaper localWallpapers progressVar)
-    urls
-
---  | Downloads a single wallpaper and saves it to the wallpaper directory.
---  Updates the progress variable when done.
-syncWallpaper ::
-  ( MonadReader env m,
-    MonadWallhaven m,
-    MonadWallpaperDB m,
-    MonadUnliftIO m
-  ) =>
-  LocalWallpapers ->
-  MVar Int ->
-  FullWallpaperURL ->
-  m ()
-syncWallpaper localWallpapers progressVar url = do
-  unless
-    (Logic.wallpaperName url `elem` localWallpapers)
-    ( getFullWallpaper url
-        >>= saveWallpaper (Logic.wallpaperName url)
-    )
-  modifyMVar_ progressVar (evaluate . (+ 1))
 
 -- | Prints the current state of the download progress bar.
 printProgressBar ::

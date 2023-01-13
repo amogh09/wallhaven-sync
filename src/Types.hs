@@ -1,8 +1,6 @@
 module Types where
 
-import Control.Monad.Reader (MonadReader, asks, liftIO)
-import UnliftIO (MonadIO, hFlush, stdout)
-import Prelude hiding (log)
+import Data.ByteString (ByteString)
 
 type FullWallpaperURL = String
 
@@ -22,3 +20,5 @@ type CollectionID = Int
 type WallpaperPath = String
 
 type Username = String
+
+type Wallpaper = ByteString
