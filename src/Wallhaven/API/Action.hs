@@ -1,6 +1,5 @@
 module Wallhaven.API.Action (getAllCollectionURLs, getFullWallpaper) where
 
-import Control.Monad.Reader (MonadReader, asks)
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Network.HTTP.Simple (Request, parseRequest_)
@@ -11,10 +10,6 @@ import UnliftIO.Exception
 import Util.Batch (batchedM)
 import Util.HTTP (httpBSWithRetry, isTooManyRequestsException)
 import Util.Time (seconds)
-import Wallhaven.API.Class
-  ( HasWallhavenAPIKey,
-    getWallhavenAPIKey,
-  )
 import qualified Wallhaven.API.Exception as Exception
 import Wallhaven.API.Logic
   ( extractFullWallpaperURLs,
@@ -23,29 +18,28 @@ import Wallhaven.API.Logic
     wallhavenCollectionPageRequest,
     wallhavenCollectionsRequest,
   )
-
-type APIM env m =
-  ( MonadReader env m,
-    MonadUnliftIO m,
-    HasWallhavenAPIKey env
-  )
+import Wallhaven.API.Types (APIKey)
 
 getAllCollectionURLs ::
-  APIM env m => Username -> Label -> m [FullWallpaperURL]
-getAllCollectionURLs username collectionLabel = do
-  collectionID <- getCollectionID username collectionLabel
-  lastPage <- getWallpapersLastPage username collectionID
+  (MonadUnliftIO m) => APIKey -> Username -> Label -> m [FullWallpaperURL]
+getAllCollectionURLs apiKey username collectionLabel = do
+  collectionID <- getCollectionID apiKey username collectionLabel
+  lastPage <- getWallpapersLastPage apiKey username collectionID
   fmap concat
     . batchedM
       defaultCallBatchSize
-      (getCollectionWallpaperURLsForPage username collectionID)
+      (getCollectionWallpaperURLsForPage apiKey username collectionID)
     $ [1 .. lastPage]
 
 -- | Gets a list of all wallpapers in the given collection for the given page.
 getCollectionWallpaperURLsForPage ::
-  APIM env m => Username -> CollectionID -> Page -> m [FullWallpaperURL]
-getCollectionWallpaperURLsForPage username cid page = do
-  apiKey <- asks getWallhavenAPIKey
+  (MonadUnliftIO m) =>
+  APIKey ->
+  Username ->
+  CollectionID ->
+  Page ->
+  m [FullWallpaperURL]
+getCollectionWallpaperURLsForPage apiKey username cid page = do
   let req = wallhavenCollectionPageRequest username apiKey cid page
   catch
     ( httpCall req
@@ -57,9 +51,8 @@ getCollectionWallpaperURLsForPage username cid page = do
 
 -- | Gets the last page number of the given collection.
 getWallpapersLastPage ::
-  APIM env m => Username -> CollectionID -> m Int
-getWallpapersLastPage username cid = do
-  apiKey <- asks getWallhavenAPIKey
+  (MonadUnliftIO m) => APIKey -> Username -> CollectionID -> m Int
+getWallpapersLastPage apiKey username cid = do
   let req = wallhavenCollectionPageRequest username apiKey cid 1
   catch
     ( httpCall req
@@ -71,9 +64,8 @@ getWallpapersLastPage username cid = do
 
 -- Calls Wallhaven API and retrieves the ID of the collection to sync.
 getCollectionID ::
-  APIM env m => Username -> Label -> m CollectionID
-getCollectionID username label = do
-  apiKey <- asks getWallhavenAPIKey
+  (MonadUnliftIO m) => APIKey -> Username -> Label -> m CollectionID
+getCollectionID apiKey username label = do
   let req = wallhavenCollectionsRequest username apiKey
   catch
     (httpCall req >>= fromEither . parseCollectionID label)
