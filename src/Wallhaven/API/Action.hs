@@ -24,14 +24,14 @@ import Wallhaven.API.Logic
     wallhavenCollectionsRequest,
   )
 
-getAllCollectionURLs ::
-  ( MonadUnliftIO m,
-    MonadReader env m,
+type APIM env m =
+  ( MonadReader env m,
+    MonadUnliftIO m,
     HasWallhavenAPIKey env
-  ) =>
-  Username ->
-  Label ->
-  m [FullWallpaperURL]
+  )
+
+getAllCollectionURLs ::
+  APIM env m => Username -> Label -> m [FullWallpaperURL]
 getAllCollectionURLs username collectionLabel = do
   collectionID <- getCollectionID username collectionLabel
   lastPage <- getWallpapersLastPage username collectionID
@@ -43,14 +43,7 @@ getAllCollectionURLs username collectionLabel = do
 
 -- | Gets a list of all wallpapers in the given collection for the given page.
 getCollectionWallpaperURLsForPage ::
-  ( MonadReader env m,
-    HasWallhavenAPIKey env,
-    MonadUnliftIO m
-  ) =>
-  Username ->
-  CollectionID ->
-  Page ->
-  m [FullWallpaperURL]
+  APIM env m => Username -> CollectionID -> Page -> m [FullWallpaperURL]
 getCollectionWallpaperURLsForPage username cid page = do
   apiKey <- asks getWallhavenAPIKey
   let req = wallhavenCollectionPageRequest username apiKey cid page
@@ -64,13 +57,7 @@ getCollectionWallpaperURLsForPage username cid page = do
 
 -- | Gets the last page number of the given collection.
 getWallpapersLastPage ::
-  ( MonadReader env m,
-    MonadUnliftIO m,
-    HasWallhavenAPIKey env
-  ) =>
-  Username ->
-  CollectionID ->
-  m Int
+  APIM env m => Username -> CollectionID -> m Int
 getWallpapersLastPage username cid = do
   apiKey <- asks getWallhavenAPIKey
   let req = wallhavenCollectionPageRequest username apiKey cid 1
@@ -84,13 +71,7 @@ getWallpapersLastPage username cid = do
 
 -- Calls Wallhaven API and retrieves the ID of the collection to sync.
 getCollectionID ::
-  ( MonadReader env m,
-    HasWallhavenAPIKey env,
-    MonadUnliftIO m
-  ) =>
-  Username ->
-  Label ->
-  m CollectionID
+  APIM env m => Username -> Label -> m CollectionID
 getCollectionID username label = do
   apiKey <- asks getWallhavenAPIKey
   let req = wallhavenCollectionsRequest username apiKey

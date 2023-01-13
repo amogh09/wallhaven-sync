@@ -76,7 +76,12 @@ syncWallpapers downloaded wallpapers = do
 -- | Syncs a single wallpaper. Skips downloading if the wallpaper is already
 -- downloaded. Downloads and saves the wallpaper otherwise.
 syncWallpaper ::
-  AppM env m => MVar Int -> [WallpaperName] -> WallpaperName -> FullWallpaperURL -> m ()
+  AppM env m =>
+  MVar Int ->
+  [WallpaperName] ->
+  WallpaperName ->
+  FullWallpaperURL ->
+  m ()
 syncWallpaper progressVar downloaded name url = do
   unless (name `elem` downloaded) $ do
     wallpaper <- downloadWallpaper url
