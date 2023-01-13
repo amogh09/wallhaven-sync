@@ -2,16 +2,15 @@ module Database.FileSystem.Action
   ( deleteWallpaper,
     saveWallpaper,
     getWallpaperNames,
-    HasWallpaperDir (..),
     createWallpaperDir,
   )
 where
 
 import Control.Monad (when)
-import Control.Monad.Reader (MonadIO, MonadReader, asks, liftIO)
-import Data.ByteString (ByteString)
+import Control.Monad.Reader (liftIO)
 import System.FilePath ((</>))
-import Types (WallpaperName)
+import Types (Wallpaper, WallpaperName)
+import UnliftIO (MonadIO)
 import UnliftIO.Directory
   ( createDirectoryIfMissing,
     doesFileExist,
@@ -20,30 +19,20 @@ import UnliftIO.Directory
   )
 import UnliftIO.IO.File (writeBinaryFile)
 
-class HasWallpaperDir a where
-  getWallpaperDir :: a -> FilePath
+type WallpaperDir = FilePath
 
-type DatabaseM env m =
-  ( MonadReader env m,
-    HasWallpaperDir env,
-    MonadIO m
-  )
+createWallpaperDir :: MonadIO m => WallpaperDir -> m ()
+createWallpaperDir = liftIO . createDirectoryIfMissing True
 
-createWallpaperDir :: DatabaseM env m => m ()
-createWallpaperDir =
-  asks getWallpaperDir >>= liftIO . createDirectoryIfMissing True
-
-deleteWallpaper :: DatabaseM env m => WallpaperName -> m ()
-deleteWallpaper name = do
-  dir <- asks getWallpaperDir
+deleteWallpaper :: MonadIO m => WallpaperDir -> WallpaperName -> m ()
+deleteWallpaper dir name = do
   let path = dir </> name
   exists <- doesFileExist path
   when exists $ removeFile path
 
-getWallpaperNames :: DatabaseM env m => m [WallpaperName]
-getWallpaperNames = asks getWallpaperDir >>= listDirectory
+getWallpaperNames :: MonadIO m => WallpaperDir -> m [WallpaperName]
+getWallpaperNames = listDirectory
 
-saveWallpaper :: DatabaseM env m => WallpaperName -> ByteString -> m ()
-saveWallpaper name wallpaper = do
-  dir <- asks getWallpaperDir
-  writeBinaryFile (dir </> name) wallpaper
+saveWallpaper ::
+  MonadIO m => WallpaperDir -> WallpaperName -> Wallpaper -> m ()
+saveWallpaper dir name = writeBinaryFile (dir </> name)

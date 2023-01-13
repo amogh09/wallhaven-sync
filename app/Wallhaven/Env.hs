@@ -1,6 +1,6 @@
 module Wallhaven.Env (Env (..), Config (..)) where
 
-import Control.Monad.Reader (ReaderT)
+import Control.Monad.Reader (ReaderT, asks)
 import qualified Database.FileSystem.Action as DBFileSystem
 import qualified Network.HTTP.Simple as HTTP
 import qualified Retry
@@ -53,9 +53,6 @@ instance HasLog Env where
 instance WallhavenAPI.HasNumParallelDownloads Env where
   getNumParallelDownloads = configNumParallelDownloads . envConfig
 
-instance DBFileSystem.HasWallpaperDir Env where
-  getWallpaperDir = configWallpaperDir . envConfig
-
 instance (MonadUnliftIO m) => MonadGetCollectionURLs (ReaderT Env m) where
   getCollectionURLs = WallhavenAPI.getAllCollectionURLs
 
@@ -71,16 +68,21 @@ instance MonadUnliftIO m => MonadDownloadWallpaper (ReaderT Env m) where
       . HTTP.parseRequest_
 
 instance (MonadIO m) => MonadDeleteWallpaper (ReaderT Env m) where
-  deleteWallpaper = DBFileSystem.deleteWallpaper
+  deleteWallpaper name = do
+    dir <- asks (configWallpaperDir . envConfig)
+    DBFileSystem.deleteWallpaper dir name
 
 instance (MonadIO m) => MonadSaveWallpaper (ReaderT Env m) where
-  saveWallpaper = DBFileSystem.saveWallpaper
+  saveWallpaper name wallpaper = do
+    dir <- asks (configWallpaperDir . envConfig)
+    DBFileSystem.saveWallpaper dir name wallpaper
 
 instance (MonadIO m) => MonadInitDB (ReaderT Env m) where
-  initDB = DBFileSystem.createWallpaperDir
+  initDB =
+    asks (configWallpaperDir . envConfig)
+      >>= DBFileSystem.createWallpaperDir
 
-instance
-  (MonadIO m) =>
-  MonadGetDownloadedWallpapers (ReaderT Env m)
-  where
-  getDownloadedWallpapers = DBFileSystem.getWallpaperNames
+instance (MonadIO m) => MonadGetDownloadedWallpapers (ReaderT Env m) where
+  getDownloadedWallpapers =
+    asks (configWallpaperDir . envConfig)
+      >>= DBFileSystem.getWallpaperNames
