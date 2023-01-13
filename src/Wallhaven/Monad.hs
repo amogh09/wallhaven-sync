@@ -10,6 +10,7 @@ module Wallhaven.Monad
     MonadSaveWallpaper (..),
     MonadWallpaperDB,
     MonadWallhaven,
+    MonadDownloadWallpaper (..),
   )
 where
 
@@ -34,7 +35,10 @@ type MonadWallpaperDB m =
   )
 
 -- | Monad for interacting with Wallhaven.
-type MonadWallhaven m = (MonadGetCollectionURLs m, MonadGetFullWallpaper m)
+type MonadWallhaven m =
+  ( MonadGetCollectionURLs m,
+    MonadGetFullWallpaper m
+  )
 
 class Monad m => MonadInitDB m where
   initDB :: m ()
@@ -46,10 +50,13 @@ class Monad m => MonadGetDownloadedWallpapers m where
   getDownloadedWallpapers :: m [WallpaperName]
 
 class Monad m => MonadSaveWallpaper m where
-  saveWallpaper :: WallpaperName -> ByteString -> m ()
+  saveWallpaper :: WallpaperName -> Wallpaper -> m ()
 
 class Monad m => MonadGetCollectionURLs m where
   getCollectionURLs :: Username -> Label -> m [FullWallpaperURL]
 
 class Monad m => MonadGetFullWallpaper m where
   getFullWallpaper :: FullWallpaperURL -> m ByteString
+
+class Monad m => MonadDownloadWallpaper m where
+  downloadWallpaper :: FullWallpaperURL -> m ByteString

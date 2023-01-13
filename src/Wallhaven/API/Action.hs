@@ -12,9 +12,7 @@ import Util.Batch (batchedM)
 import Util.HTTP (httpBSWithRetry, isTooManyRequestsException)
 import Util.Time (seconds)
 import Wallhaven.API.Class
-  ( HasNumParallelDownloads,
-    HasWallhavenAPIKey,
-    getNumParallelDownloads,
+  ( HasWallhavenAPIKey,
     getWallhavenAPIKey,
   )
 import qualified Wallhaven.API.Exception as Exception
@@ -29,19 +27,17 @@ import Wallhaven.API.Logic
 getAllCollectionURLs ::
   ( MonadUnliftIO m,
     MonadReader env m,
-    HasWallhavenAPIKey env,
-    HasNumParallelDownloads env
+    HasWallhavenAPIKey env
   ) =>
   Username ->
   Label ->
   m [FullWallpaperURL]
 getAllCollectionURLs username collectionLabel = do
-  numParallelDownloads <- asks getNumParallelDownloads
   collectionID <- getCollectionID username collectionLabel
   lastPage <- getWallpapersLastPage username collectionID
   fmap concat
     . batchedM
-      numParallelDownloads
+      defaultCallBatchSize
       (getCollectionWallpaperURLsForPage username collectionID)
     $ [1 .. lastPage]
 
@@ -104,6 +100,9 @@ getCollectionID username label = do
 
 getFullWallpaper :: (MonadUnliftIO m) => FullWallpaperURL -> m ByteString
 getFullWallpaper = httpCall . parseRequest_
+
+defaultCallBatchSize :: NumParallelDownloads
+defaultCallBatchSize = 5
 
 -- | A sensible default for max API call attempts.
 defaultHTTPMaxAttempts :: Retry.MaxAttempts
