@@ -41,6 +41,7 @@ library wallhaven-sync-internal
     default-extensions:
         TypeSynonymInstances BangPatterns OverloadedStrings
         FlexibleInstances TupleSections ConstraintKinds
+        MultiParamTypeClasses
 
     ghc-options:        -Wall
     build-depends:

@@ -2,13 +2,19 @@ module Wallhaven.Env (Env (..), Config (..)) where
 
 import Control.Monad.Reader (ReaderT, asks)
 import qualified Database.FileSystem.Action as DBFileSystem
+import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
+import Network.HTTP.Types (unauthorized401)
 import qualified Retry
+import Types (Label, Username)
 import qualified Types
-import UnliftIO (MonadIO, MonadUnliftIO)
+import UnliftIO (MonadIO, MonadUnliftIO, catch, throwIO)
 import qualified Util.HTTP as HTTP
 import Util.Time (seconds)
 import qualified Wallhaven.API.Action as WallhavenAPI
+import Wallhaven.API.Exception (WallhavenAPIException)
+import qualified Wallhaven.API.Exception as APIException
+import Wallhaven.Exception (WallhavenSyncException (CollectionFetchException))
 import Wallhaven.Monad
 import Prelude hiding (log)
 
@@ -49,7 +55,25 @@ instance HasLog Env where
 instance (MonadUnliftIO m) => MonadGetCollectionURLs (ReaderT Env m) where
   getCollectionURLs username label = do
     apiKey <- asks (configWallhavenAPIKey . envConfig)
-    WallhavenAPI.getAllCollectionURLs apiKey username label
+    catch
+      (WallhavenAPI.getAllCollectionURLs apiKey username label)
+      (throwIO . collectionFetchExceptionHandler username label)
+
+collectionFetchExceptionHandler ::
+  Username -> Label -> WallhavenAPIException -> WallhavenSyncException
+collectionFetchExceptionHandler
+  username
+  label
+  ( APIException.CollectionsFetchException
+      (HTTP.HttpExceptionRequest _ (HTTP.StatusCodeException res _))
+    )
+    | HTTP.getResponseStatus res == unauthorized401 =
+        let oneLine = "not authorized to access collection, is your API key correct?"
+            verbose = show res
+         in CollectionFetchException username label oneLine verbose
+collectionFetchExceptionHandler username label e =
+  let (oneLine, verbose) = ("HTTP request to fetch the collection failed", show e)
+   in CollectionFetchException username label oneLine verbose
 
 instance MonadUnliftIO m => MonadGetFullWallpaper (ReaderT Env m) where
   getFullWallpaper = WallhavenAPI.getFullWallpaper

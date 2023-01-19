@@ -6,9 +6,11 @@ import qualified Data.List as List
 import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
+import Wallhaven.Exception (WallhavenSyncException (..))
 import Wallhaven.Logic (wallpaperName)
 import Wallhaven.Monad
-  ( HasDeleteUnliked,
+  ( HasDebug,
+    HasDeleteUnliked,
     HasLog,
     MonadDownloadWallpaper,
     MonadInitDB (initDB),
@@ -17,6 +19,7 @@ import Wallhaven.Monad
     deleteWallpaper,
     downloadWallpaper,
     getCollectionURLs,
+    getDebug,
     getDeleteUnliked,
     getDownloadedWallpapers,
     getLog,
@@ -39,13 +42,41 @@ type AppM env m =
     HasLog env,
     MonadWallhaven m,
     MonadWallpaperDB m,
+    HasDebug env,
     MonadDownloadWallpaper m,
     MonadUnliftIO m
   )
 
+handleException ::
+  (MonadReader env m, HasDebug env, HasLog env, MonadIO m) =>
+  WallhavenSyncException ->
+  m ()
+handleException e = do
+  debug <- asks getDebug
+  if debug
+    then logLn $ renderExceptionVerbose e
+    else logLn $ renderExceptionOneLine e
+
+renderExceptionOneLine :: WallhavenSyncException -> String
+renderExceptionOneLine (CollectionFetchException username label oneLineCause _) =
+  "Failed to fetch collection '"
+    <> username
+    <> "/"
+    <> label
+    <> "': "
+    <> oneLineCause
+
+renderExceptionVerbose :: WallhavenSyncException -> String
+renderExceptionVerbose e@(CollectionFetchException _ _ _ verboseCause) =
+  renderExceptionOneLine e <> "\nCause: " <> verboseCause
+
 -- | Main function. Syncs the specified collection.
 syncAllWallpapers :: AppM env m => Username -> Label -> m ()
-syncAllWallpapers username label = do
+syncAllWallpapers username label =
+  catch (syncAllWallpapers' username label) handleException
+
+syncAllWallpapers' :: AppM env m => Username -> Label -> m ()
+syncAllWallpapers' username label = do
   initDB
   urls <- getCollectionURLs username label
   let names = fmap wallpaperName urls
