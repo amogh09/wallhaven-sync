@@ -6,13 +6,13 @@ import UnliftIO.Exception (Exception, Typeable)
 
 type JSONParseError = String
 
-data WallhavenAPIException
-  = CollectionsFetchException HTTP.HttpException
-  | CollectionsParseException JSONParseError
+data CollectionURLsFetchException
+  = UserCollectionsHTTPException HTTP.HttpException
+  | UserCollectionsParseException JSONParseError
   | CollectionNotFoundException Label
-  | CollectionWallpapersFetchException CollectionID Page HTTP.HttpException
-  | WallpapersParseException JSONParseError
-  | WallhavenMetaParseException JSONParseError
+  | CollectionFetchHTTPException CollectionID Page HTTP.HttpException
+  | MetaParseException CollectionID JSONParseError
+  | WallpaperURLsParseException JSONParseError
   deriving (Typeable, Show)
 
-instance Exception WallhavenAPIException
+instance Exception CollectionURLsFetchException

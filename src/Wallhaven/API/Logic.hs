@@ -55,11 +55,11 @@ wallhavenCollectionPageRequest user apiKey cid page = do
 -- | Parses Wallhaven collections response and finds the ID of the collection
 -- with the provided label.
 parseCollectionID ::
-  Label -> ByteString -> Either Exception.WallhavenAPIException CollectionID
+  Label -> ByteString -> Either Exception.CollectionURLsFetchException CollectionID
 parseCollectionID label jsonBS = do
   collectionsResponse <-
     first
-      Exception.CollectionsParseException
+      Exception.UserCollectionsParseException
       (Aeson.eitherDecodeStrict jsonBS)
   maybe
     (Left . Exception.CollectionNotFoundException $ label)
