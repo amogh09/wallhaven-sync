@@ -6,7 +6,6 @@ module Wallhaven.Monad
     HasDeleteUnliked (..),
     HasLog (..),
     MonadGetCollectionURLs (..),
-    MonadGetFullWallpaper (..),
     MonadSaveWallpaper (..),
     MonadWallpaperDB,
     MonadWallhaven,
@@ -37,7 +36,7 @@ type MonadWallpaperDB m =
 -- | Monad for interacting with Wallhaven.
 type MonadWallhaven m =
   ( MonadGetCollectionURLs m,
-    MonadGetFullWallpaper m
+    MonadDownloadWallpaper m
   )
 
 class Monad m => MonadInitDB m where
@@ -54,9 +53,6 @@ class Monad m => MonadSaveWallpaper m where
 
 class Monad m => MonadGetCollectionURLs m where
   getCollectionURLs :: Username -> Label -> m [FullWallpaperURL]
-
-class Monad m => MonadGetFullWallpaper m where
-  getFullWallpaper :: FullWallpaperURL -> m ByteString
 
 class Monad m => MonadDownloadWallpaper m where
   downloadWallpaper :: FullWallpaperURL -> m ByteString
