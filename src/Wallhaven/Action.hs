@@ -26,15 +26,6 @@ import Wallhaven.Monad
   )
 import Prelude hiding (log, writeFile)
 
-log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
-log !msg = do
-  logger <- asks getLog
-  liftIO $ logger msg
-  hFlush stdout
-
-logLn :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
-logLn msg = log (msg <> "\n")
-
 type AppM env m =
   ( MonadReader env m,
     HasDeleteUnliked env,
@@ -45,6 +36,11 @@ type AppM env m =
     MonadUnliftIO m
   )
 
+-- | Main function. Syncs the specified collection.
+syncAllWallpapers :: AppM env m => Username -> Label -> m ()
+syncAllWallpapers username label =
+  catch (syncAllWallpapers' username label) handleException
+
 handleException ::
   (MonadReader env m, HasDebug env, HasLog env, MonadIO m) =>
   WallhavenSyncException ->
@@ -54,48 +50,6 @@ handleException e = do
   if debug
     then logLn $ renderExceptionVerbose e
     else logLn $ renderExceptionOneLine e
-
-renderExceptionOneLine :: WallhavenSyncException -> String
-renderExceptionOneLine
-  (CollectionFetchException username label oneLineCause _) =
-    "Failed to fetch collection '"
-      <> username
-      <> "/"
-      <> label
-      <> "': "
-      <> oneLineCause
-renderExceptionOneLine (InitDBException oneLineCause _) =
-  "Failed to initialize wallpaper database: " <> oneLineCause
-renderExceptionOneLine (GetDownloadWallpapersException oneLineCause _) =
-  "Failed to list downloaded wallpapers: " <> oneLineCause
-renderExceptionOneLine (DeleteWallpaperException name oneLineCause _) =
-  "Failed to delete wallpaper '" <> name <> "': " <> oneLineCause
-renderExceptionOneLine (SaveWallpaperException name oneLineCause _) =
-  "\nFailed to save wallpaper '" <> name <> "': " <> oneLineCause
-renderExceptionOneLine (WallpaperDownloadException url oneLineCause _) =
-  "\nFailed to download wallpaper from URL '"
-    <> url
-    <> "': "
-    <> oneLineCause
-
-renderExceptionVerbose :: WallhavenSyncException -> String
-renderExceptionVerbose e@(CollectionFetchException _ _ _ cause) =
-  renderExceptionOneLine e <> "\nCause: " <> cause
-renderExceptionVerbose e@(InitDBException _ cause) =
-  renderExceptionOneLine e <> "\nCause: " <> cause
-renderExceptionVerbose e@(GetDownloadWallpapersException _ cause) =
-  renderExceptionOneLine e <> "\nCause: " <> cause
-renderExceptionVerbose e@(DeleteWallpaperException _ _ cause) =
-  renderExceptionOneLine e <> "\nCause: " <> cause
-renderExceptionVerbose e@(SaveWallpaperException _ _ cause) =
-  renderExceptionOneLine e <> "\nCause: " <> cause
-renderExceptionVerbose e@(WallpaperDownloadException _ _ cause) =
-  renderExceptionOneLine e <> "\nCause: " <> cause
-
--- | Main function. Syncs the specified collection.
-syncAllWallpapers :: AppM env m => Username -> Label -> m ()
-syncAllWallpapers username label =
-  catch (syncAllWallpapers' username label) handleException
 
 syncAllWallpapers' :: AppM env m => Username -> Label -> m ()
 syncAllWallpapers' username label = do
@@ -154,3 +108,49 @@ printProgressBar ::
 printProgressBar var total = do
   doneCount <- readMVar var
   log ("\rSynced: [" <> show doneCount <> "/" <> show total <> "]")
+
+log :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
+log !msg = do
+  logger <- asks getLog
+  liftIO $ logger msg
+  hFlush stdout
+
+logLn :: (MonadReader r m, HasLog r, MonadIO m) => String -> m ()
+logLn msg = log (msg <> "\n")
+
+renderExceptionOneLine :: WallhavenSyncException -> String
+renderExceptionOneLine
+  (CollectionFetchException username label oneLineCause _) =
+    "Failed to fetch collection '"
+      <> username
+      <> "/"
+      <> label
+      <> "': "
+      <> oneLineCause
+renderExceptionOneLine (InitDBException oneLineCause _) =
+  "Failed to initialize wallpaper database: " <> oneLineCause
+renderExceptionOneLine (GetDownloadWallpapersException oneLineCause _) =
+  "Failed to list downloaded wallpapers: " <> oneLineCause
+renderExceptionOneLine (DeleteWallpaperException name oneLineCause _) =
+  "Failed to delete wallpaper '" <> name <> "': " <> oneLineCause
+renderExceptionOneLine (SaveWallpaperException name oneLineCause _) =
+  "\nFailed to save wallpaper '" <> name <> "': " <> oneLineCause
+renderExceptionOneLine (WallpaperDownloadException url oneLineCause _) =
+  "\nFailed to download wallpaper from URL '"
+    <> url
+    <> "': "
+    <> oneLineCause
+
+renderExceptionVerbose :: WallhavenSyncException -> String
+renderExceptionVerbose e@(CollectionFetchException _ _ _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(InitDBException _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(GetDownloadWallpapersException _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(DeleteWallpaperException _ _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(SaveWallpaperException _ _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(WallpaperDownloadException _ _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
