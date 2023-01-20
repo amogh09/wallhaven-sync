@@ -75,7 +75,9 @@ collectionFetchExceptionHandler
          in CollectionFetchException username label oneLine verbose
     | HTTP.getResponseStatus res == notFound404 =
         let oneLine =
-              "collections not found for the user,"
+              "no collections found for user "
+                <> username
+                <> ","
                 <> " is the username valid?"
             verbose = show res
          in CollectionFetchException username label oneLine verbose
@@ -121,7 +123,7 @@ collectionFetchExceptionHandler
   username
   label
   (WallpaperURLsParseException jsonErr) =
-    let oneLine = "failed to parse wallpapers URLs from API response"
+    let oneLine = "failed to parse wallpaper URLs from API response"
      in CollectionFetchException username label oneLine jsonErr
 
 instance MonadUnliftIO m => MonadGetFullWallpaper (ReaderT Env m) where
