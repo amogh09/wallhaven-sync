@@ -44,10 +44,10 @@ getCollectionWallpaperURLsForPage apiKey username cid page = do
   catch
     ( httpCall req
         >>= fromEither
-          . first Exception.WallpapersParseException
+          . first Exception.WallpaperURLsParseException
           . extractFullWallpaperURLs
     )
-    (throwIO . Exception.CollectionWallpapersFetchException cid page)
+    (throwIO . Exception.CollectionFetchHTTPException cid page)
 
 -- | Gets the last page number of the given collection.
 getWallpapersLastPage ::
@@ -57,10 +57,10 @@ getWallpapersLastPage apiKey username cid = do
   catch
     ( httpCall req
         >>= fromEither
-          . first Exception.WallhavenMetaParseException
+          . first (Exception.MetaParseException cid)
           . extractWallhavenMetaLastPage
     )
-    (throwIO . Exception.CollectionWallpapersFetchException cid 1)
+    (throwIO . Exception.CollectionFetchHTTPException cid 1)
 
 -- Calls Wallhaven API and retrieves the ID of the collection to sync.
 getCollectionID ::
@@ -69,7 +69,7 @@ getCollectionID apiKey username label = do
   let req = wallhavenCollectionsRequest username apiKey
   catch
     (httpCall req >>= fromEither . parseCollectionID label)
-    (throwIO . Exception.CollectionsFetchException)
+    (throwIO . Exception.UserCollectionsHTTPException)
 
 getFullWallpaper :: (MonadUnliftIO m) => FullWallpaperURL -> m ByteString
 getFullWallpaper = httpCall . parseRequest_
