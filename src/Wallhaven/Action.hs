@@ -58,17 +58,26 @@ handleException e = do
     else logLn $ renderExceptionOneLine e
 
 renderExceptionOneLine :: WallhavenSyncException -> String
-renderExceptionOneLine (CollectionFetchException username label oneLineCause _) =
-  "Failed to fetch collection '"
-    <> username
-    <> "/"
-    <> label
-    <> "': "
-    <> oneLineCause
+renderExceptionOneLine
+  (CollectionFetchException username label oneLineCause _) =
+    "Failed to fetch collection '"
+      <> username
+      <> "/"
+      <> label
+      <> "': "
+      <> oneLineCause
+renderExceptionOneLine (InitDBException oneLineCause _) =
+  "Failed to initialize wallpaper database: " <> oneLineCause
+renderExceptionOneLine (GetDownloadWallpapersException oneLineCause _) =
+  "Failed to list downloaded wallpapers: " <> oneLineCause
 
 renderExceptionVerbose :: WallhavenSyncException -> String
-renderExceptionVerbose e@(CollectionFetchException _ _ _ verboseCause) =
-  renderExceptionOneLine e <> "\nCause: " <> verboseCause
+renderExceptionVerbose e@(CollectionFetchException _ _ _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(InitDBException _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(GetDownloadWallpapersException _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
 
 -- | Main function. Syncs the specified collection.
 syncAllWallpapers :: AppM env m => Username -> Label -> m ()

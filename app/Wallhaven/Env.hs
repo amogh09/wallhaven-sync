@@ -7,6 +7,7 @@ import qualified Network.HTTP.Simple as HTTP
 import Network.HTTP.Types (unauthorized401)
 import Network.HTTP.Types.Status (notFound404)
 import qualified Retry
+import System.IO.Error (isPermissionError)
 import Types (Label, Username)
 import qualified Types
 import UnliftIO (MonadIO, MonadUnliftIO, catch, throwIO)
@@ -14,7 +15,7 @@ import qualified Util.HTTP as HTTP
 import Util.Time (seconds)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import Wallhaven.API.Exception (CollectionURLsFetchException (..))
-import Wallhaven.Exception (WallhavenSyncException (CollectionFetchException))
+import Wallhaven.Exception (WallhavenSyncException (CollectionFetchException, InitDBException))
 import Wallhaven.Monad
 import Prelude hiding (log)
 
@@ -147,12 +148,48 @@ instance (MonadIO m) => MonadSaveWallpaper (ReaderT Env m) where
     dir <- asks (configWallpaperDir . envConfig)
     DBFileSystem.saveWallpaper dir name wallpaper
 
-instance (MonadIO m) => MonadInitDB (ReaderT Env m) where
-  initDB =
-    asks (configWallpaperDir . envConfig)
-      >>= DBFileSystem.createWallpaperDir
+instance (MonadUnliftIO m) => MonadInitDB (ReaderT Env m) where
+  initDB = do
+    dir <- asks (configWallpaperDir . envConfig)
+    catch
+      (DBFileSystem.createWallpaperDir dir)
+      (throwIO . initDBExceptionHandler dir)
 
-instance (MonadIO m) => MonadGetDownloadedWallpapers (ReaderT Env m) where
-  getDownloadedWallpapers =
-    asks (configWallpaperDir . envConfig)
-      >>= DBFileSystem.getWallpaperNames
+initDBExceptionHandler :: FilePath -> IOError -> WallhavenSyncException
+initDBExceptionHandler dir e
+  | isPermissionError e =
+      let oneLine =
+            "no permission to create wallpaper directory '"
+              <> dir
+              <> "'"
+          verbose = show e
+       in InitDBException oneLine verbose
+  | otherwise =
+      InitDBException
+        ("failed to create wallpaper directory '" <> dir <> "'")
+        (show e)
+
+instance
+  (MonadUnliftIO m) =>
+  MonadGetDownloadedWallpapers (ReaderT Env m)
+  where
+  getDownloadedWallpapers = do
+    dir <- asks (configWallpaperDir . envConfig)
+    catch
+      (DBFileSystem.getWallpaperNames dir)
+      (throwIO . getDownloadedWallpapersExceptionHandler dir)
+
+getDownloadedWallpapersExceptionHandler ::
+  FilePath -> IOError -> WallhavenSyncException
+getDownloadedWallpapersExceptionHandler dir e
+  | isPermissionError e =
+      let oneLine =
+            "no permission to list contents of wallpaper directory '"
+              <> dir
+              <> "'"
+          verbose = show e
+       in InitDBException oneLine verbose
+  | otherwise =
+      InitDBException
+        ("failed to list contents of wallpaper directory '" <> dir <> "'")
+        (show e)
