@@ -70,6 +70,15 @@ renderExceptionOneLine (InitDBException oneLineCause _) =
   "Failed to initialize wallpaper database: " <> oneLineCause
 renderExceptionOneLine (GetDownloadWallpapersException oneLineCause _) =
   "Failed to list downloaded wallpapers: " <> oneLineCause
+renderExceptionOneLine (DeleteWallpaperException name oneLineCause _) =
+  "Failed to delete wallpaper '" <> name <> "': " <> oneLineCause
+renderExceptionOneLine (SaveWallpaperException name oneLineCause _) =
+  "\nFailed to save wallpaper '" <> name <> "': " <> oneLineCause
+renderExceptionOneLine (WallpaperDownloadException url oneLineCause _) =
+  "\nFailed to download wallpaper from URL '"
+    <> url
+    <> "': "
+    <> oneLineCause
 
 renderExceptionVerbose :: WallhavenSyncException -> String
 renderExceptionVerbose e@(CollectionFetchException _ _ _ cause) =
@@ -77,6 +86,12 @@ renderExceptionVerbose e@(CollectionFetchException _ _ _ cause) =
 renderExceptionVerbose e@(InitDBException _ cause) =
   renderExceptionOneLine e <> "\nCause: " <> cause
 renderExceptionVerbose e@(GetDownloadWallpapersException _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(DeleteWallpaperException _ _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(SaveWallpaperException _ _ cause) =
+  renderExceptionOneLine e <> "\nCause: " <> cause
+renderExceptionVerbose e@(WallpaperDownloadException _ _ cause) =
   renderExceptionOneLine e <> "\nCause: " <> cause
 
 -- | Main function. Syncs the specified collection.
@@ -121,9 +136,9 @@ syncWallpaper ::
   FullWallpaperURL ->
   m ()
 syncWallpaper progressVar downloaded name url = do
-  unless (name `elem` downloaded) $ do
-    wallpaper <- downloadWallpaper url
-    saveWallpaper name wallpaper
+  unless
+    (name `elem` downloaded)
+    (downloadWallpaper url >>= saveWallpaper name)
   modifyMVar_ progressVar (evaluate . (+ 1))
 
 -- Deletes the local wallpapers that are not in the favorites anymore.

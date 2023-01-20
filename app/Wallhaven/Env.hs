@@ -6,16 +6,14 @@ import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import Network.HTTP.Types (unauthorized401)
 import Network.HTTP.Types.Status (notFound404)
-import qualified Retry
+import System.FilePath ((</>))
 import System.IO.Error (isPermissionError)
-import Types (Label, Username)
+import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import qualified Types
-import UnliftIO (MonadIO, MonadUnliftIO, catch, throwIO)
-import qualified Util.HTTP as HTTP
-import Util.Time (seconds)
+import UnliftIO (MonadUnliftIO, catch, throwIO)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import Wallhaven.API.Exception (CollectionURLsFetchException (..))
-import Wallhaven.Exception (WallhavenSyncException (CollectionFetchException, InitDBException))
+import Wallhaven.Exception (WallhavenSyncException (..))
 import Wallhaven.Monad
 import Prelude hiding (log)
 
@@ -37,12 +35,6 @@ data Config = Config
     -- | Debug mode
     configDebug :: Bool
   }
-
-defaultMaxAttempts :: Retry.MaxAttempts
-defaultMaxAttempts = 5
-
-defaultDelay :: Retry.RetryDelayMicros
-defaultDelay = seconds 3
 
 instance HasDebug Env where
   getDebug = configDebug . envConfig
@@ -127,26 +119,59 @@ collectionFetchExceptionHandler
     let oneLine = "failed to parse wallpaper URLs from API response"
      in CollectionFetchException username label oneLine jsonErr
 
-instance MonadUnliftIO m => MonadGetFullWallpaper (ReaderT Env m) where
-  getFullWallpaper = WallhavenAPI.getFullWallpaper
-
 instance MonadUnliftIO m => MonadDownloadWallpaper (ReaderT Env m) where
-  downloadWallpaper =
-    HTTP.httpBSWithRetry
-      defaultMaxAttempts
-      defaultDelay
-      HTTP.isTooManyRequestsException
-      . HTTP.parseRequest_
+  downloadWallpaper url =
+    catch
+      (WallhavenAPI.getFullWallpaper url)
+      (throwIO . wallpaperDownloadExceptionHandler url)
 
-instance (MonadIO m) => MonadDeleteWallpaper (ReaderT Env m) where
+wallpaperDownloadExceptionHandler ::
+  FullWallpaperURL -> HTTP.HttpException -> WallhavenSyncException
+wallpaperDownloadExceptionHandler url e =
+  let oneLine = "HTTP request to download wallpaper failed"
+   in WallpaperDownloadException url oneLine (show e)
+
+instance (MonadUnliftIO m) => MonadDeleteWallpaper (ReaderT Env m) where
   deleteWallpaper name = do
     dir <- asks (configWallpaperDir . envConfig)
-    DBFileSystem.deleteWallpaper dir name
+    catch
+      (DBFileSystem.deleteWallpaper dir name)
+      (throwIO . deleteWallpaperExceptionHandler dir name)
 
-instance (MonadIO m) => MonadSaveWallpaper (ReaderT Env m) where
+deleteWallpaperExceptionHandler ::
+  FilePath -> WallpaperName -> IOError -> WallhavenSyncException
+deleteWallpaperExceptionHandler dir name e
+  | isPermissionError e =
+      let oneLine =
+            "no permission to delete wallpaper file " <> (dir </> name)
+          verbose = show e
+       in DeleteWallpaperException name oneLine verbose
+  | otherwise =
+      DeleteWallpaperException
+        name
+        ("failed to delete wallpaper file " <> (dir </> name))
+        (show e)
+
+instance (MonadUnliftIO m) => MonadSaveWallpaper (ReaderT Env m) where
   saveWallpaper name wallpaper = do
     dir <- asks (configWallpaperDir . envConfig)
-    DBFileSystem.saveWallpaper dir name wallpaper
+    catch
+      (DBFileSystem.saveWallpaper dir name wallpaper)
+      (throwIO . saveWallpaperExceptionHandler dir name)
+
+saveWallpaperExceptionHandler ::
+  FilePath -> WallpaperName -> IOError -> WallhavenSyncException
+saveWallpaperExceptionHandler dir name e
+  | isPermissionError e =
+      let oneLine =
+            "no permission to save wallpaper to file " <> (dir </> name)
+          verbose = show e
+       in SaveWallpaperException name oneLine verbose
+  | otherwise =
+      SaveWallpaperException
+        name
+        ("failed to save wallpaper to file " <> (dir </> name))
+        (show e)
 
 instance (MonadUnliftIO m) => MonadInitDB (ReaderT Env m) where
   initDB = do
