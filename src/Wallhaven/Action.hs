@@ -12,7 +12,6 @@ import Wallhaven.Monad
   ( HasDebug,
     HasDeleteUnliked,
     HasLog,
-    MonadDownloadWallpaper,
     MonadInitDB (initDB),
     MonadWallhaven,
     MonadWallpaperDB,
@@ -43,7 +42,6 @@ type AppM env m =
     MonadWallhaven m,
     MonadWallpaperDB m,
     HasDebug env,
-    MonadDownloadWallpaper m,
     MonadUnliftIO m
   )
 
