@@ -1,4 +1,4 @@
-module Database.FileSystem.Action (deleteFileIfExists) where
+module Util.FileSystem (deleteFileIfExists) where
 
 import Control.Monad (when)
 import UnliftIO (MonadIO)

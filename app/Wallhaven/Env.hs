@@ -1,7 +1,6 @@
 module Wallhaven.Env (Env (..), Config (..)) where
 
 import Control.Monad.Reader (ReaderT, asks)
-import Database.FileSystem.Action (deleteFileIfExists)
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import Network.HTTP.Types (unauthorized401)
@@ -13,6 +12,7 @@ import qualified Types
 import UnliftIO (MonadUnliftIO, catch, throwIO)
 import UnliftIO.Directory (createDirectoryIfMissing, listDirectory)
 import UnliftIO.IO.File (writeBinaryFile)
+import Util.FileSystem (deleteFileIfExists)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import Wallhaven.API.Exception (CollectionURLsFetchException (..))
 import Wallhaven.Exception (WallhavenSyncException (..))
