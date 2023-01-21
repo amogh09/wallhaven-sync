@@ -1,38 +1,10 @@
-module Database.FileSystem.Action
-  ( deleteWallpaper,
-    saveWallpaper,
-    getWallpaperNames,
-    createWallpaperDir,
-  )
-where
+module Database.FileSystem.Action (deleteFileIfExists) where
 
 import Control.Monad (when)
-import Control.Monad.Reader (liftIO)
-import System.FilePath ((</>))
-import Types (Wallpaper, WallpaperName)
 import UnliftIO (MonadIO)
-import UnliftIO.Directory
-  ( createDirectoryIfMissing,
-    doesFileExist,
-    listDirectory,
-    removeFile,
-  )
-import UnliftIO.IO.File (writeBinaryFile)
+import UnliftIO.Directory (doesFileExist, removeFile)
 
-type WallpaperDir = FilePath
-
-createWallpaperDir :: MonadIO m => WallpaperDir -> m ()
-createWallpaperDir = liftIO . createDirectoryIfMissing True
-
-deleteWallpaper :: MonadIO m => WallpaperDir -> WallpaperName -> m ()
-deleteWallpaper dir name = do
-  let path = dir </> name
+deleteFileIfExists :: MonadIO m => FilePath -> m ()
+deleteFileIfExists path = do
   exists <- doesFileExist path
   when exists $ removeFile path
-
-getWallpaperNames :: MonadIO m => WallpaperDir -> m [WallpaperName]
-getWallpaperNames = listDirectory
-
-saveWallpaper ::
-  MonadIO m => WallpaperDir -> WallpaperName -> Wallpaper -> m ()
-saveWallpaper dir name = writeBinaryFile (dir </> name)
