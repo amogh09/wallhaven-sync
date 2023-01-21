@@ -23,18 +23,15 @@ library wallhaven-sync-internal
         Util.List
         Util.Batch
         Util.HTTP
-
+        Util.FileSystem
         Wallhaven.Logic
         Wallhaven.Exception
         Wallhaven.Monad
         Wallhaven.Action
-
         Wallhaven.API.Action
         Wallhaven.API.Exception
         Wallhaven.API.Types
         Wallhaven.API.Logic
-
-        Database.FileSystem.Action
 
     hs-source-dirs:     src
     default-language:   Haskell2010
@@ -96,7 +93,6 @@ test-suite spec
         RetrySpec
         Util.Gen
         Util.BatchSpec
-
         Wallhaven.API.TypesSpec
         Wallhaven.API.LogicSpec
 

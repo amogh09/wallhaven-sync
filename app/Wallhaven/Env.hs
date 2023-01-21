@@ -1,7 +1,6 @@
 module Wallhaven.Env (Env (..), Config (..)) where
 
 import Control.Monad.Reader (ReaderT, asks)
-import qualified Database.FileSystem.Action as DBFileSystem
 import qualified Network.HTTP.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import Network.HTTP.Types (unauthorized401)
@@ -11,6 +10,9 @@ import System.IO.Error (isPermissionError)
 import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import qualified Types
 import UnliftIO (MonadUnliftIO, catch, throwIO)
+import UnliftIO.Directory (createDirectoryIfMissing, listDirectory)
+import UnliftIO.IO.File (writeBinaryFile)
+import Util.FileSystem (deleteFileIfExists)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import Wallhaven.API.Exception (CollectionURLsFetchException (..))
 import Wallhaven.Exception (WallhavenSyncException (..))
@@ -135,7 +137,7 @@ instance (MonadUnliftIO m) => MonadDeleteWallpaper (ReaderT Env m) where
   deleteWallpaper name = do
     dir <- asks (configWallpaperDir . envConfig)
     catch
-      (DBFileSystem.deleteWallpaper dir name)
+      (deleteFileIfExists $ dir </> name)
       (throwIO . deleteWallpaperExceptionHandler dir name)
 
 deleteWallpaperExceptionHandler ::
@@ -156,7 +158,7 @@ instance (MonadUnliftIO m) => MonadSaveWallpaper (ReaderT Env m) where
   saveWallpaper name wallpaper = do
     dir <- asks (configWallpaperDir . envConfig)
     catch
-      (DBFileSystem.saveWallpaper dir name wallpaper)
+      (writeBinaryFile (dir </> name) wallpaper)
       (throwIO . saveWallpaperExceptionHandler dir name)
 
 saveWallpaperExceptionHandler ::
@@ -177,7 +179,7 @@ instance (MonadUnliftIO m) => MonadInitDB (ReaderT Env m) where
   initDB = do
     dir <- asks (configWallpaperDir . envConfig)
     catch
-      (DBFileSystem.createWallpaperDir dir)
+      (createDirectoryIfMissing True dir)
       (throwIO . initDBExceptionHandler dir)
 
 initDBExceptionHandler :: FilePath -> IOError -> WallhavenSyncException
@@ -201,7 +203,7 @@ instance
   getDownloadedWallpapers = do
     dir <- asks (configWallpaperDir . envConfig)
     catch
-      (DBFileSystem.getWallpaperNames dir)
+      (listDirectory dir)
       (throwIO . getDownloadedWallpapersExceptionHandler dir)
 
 getDownloadedWallpapersExceptionHandler ::
