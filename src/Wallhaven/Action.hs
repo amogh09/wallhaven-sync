@@ -3,12 +3,13 @@ module Wallhaven.Action (deleteUnlikedWallpapers, syncAllWallpapers) where
 import Control.Monad (forever, unless, when)
 import Control.Monad.Reader (MonadReader, asks)
 import qualified Data.List as List
-import Data.Time (diffUTCTime, getCurrentTime, nominalDiffTimeToSeconds)
+import Data.Time (nominalDiffTimeToSeconds)
 import Text.Printf (printf)
 import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
 import Util.Batch (batchedM_)
+import Util.Time (timed_)
 import Wallhaven.Exception (WallhavenSyncException (..))
 import Wallhaven.Logic (wallpaperName)
 import Wallhaven.Monad
@@ -59,26 +60,27 @@ handleException e = do
 
 syncAllWallpapers' :: AppM env m => Username -> Label -> m ()
 syncAllWallpapers' username label = do
-  startTime <- liftIO getCurrentTime
-  initDB
-  urls <- getCollectionURLs username label
-  let names = fmap wallpaperName urls
-  downloaded <- getDownloadedWallpapers
-  deleteUnliked <- asks getDeleteUnliked
-  when deleteUnliked $ do
-    unliked <- deleteUnlikedWallpapers downloaded names
-    logLn "Following wallpapers were found to be unliked and so were deleted:"
-    mapM_ logLn unliked
-  syncWallpapers downloaded $ names `zip` urls
-  timeTaken <-
-    diffUTCTime
-      <$> liftIO getCurrentTime
-      <*> pure startTime
-  let timeTakenSecs = realToFrac (nominalDiffTimeToSeconds timeTaken) :: Double
+  timeTaken <- timed_ go
+  let timeTakenSecs =
+        realToFrac (nominalDiffTimeToSeconds timeTaken) :: Double
   logLn $
     "\nAll wallpapers synced successfully in "
       <> printf "%.2f" timeTakenSecs
       <> " seconds."
+  where
+    go = do
+      initDB
+      urls <- getCollectionURLs username label
+      let names = fmap wallpaperName urls
+      downloaded <- getDownloadedWallpapers
+      deleteUnliked <- asks getDeleteUnliked
+      when deleteUnliked $ do
+        unliked <- deleteUnlikedWallpapers downloaded names
+        logLn $
+          "Following wallpapers were found to be unliked"
+            <> " and so were deleted:"
+        mapM_ logLn unliked
+      syncWallpapers downloaded $ names `zip` urls
 
 -- | Syncs the provided wallpapers with the database.
 syncWallpapers ::
