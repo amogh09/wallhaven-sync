@@ -17,9 +17,9 @@ source-repository head
 
 library wallhaven-sync-internal
     exposed-modules:
-        Retry
         Types
         Util.Time
+        Util.Retry
         Util.List
         Util.Batch
         Util.HTTP
@@ -93,7 +93,7 @@ test-suite spec
     other-modules:
         Wallhaven.LogicSpec
         Wallhaven.ActionSpec
-        RetrySpec
+        Util.RetrySpec
         Util.Gen
         Util.BatchSpec
         Wallhaven.API.TypesSpec
