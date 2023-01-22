@@ -11,14 +11,16 @@ import UnliftIO.IO.File
 import Util.FileSystem (deleteFileIfExists)
 import Wallhaven.Exception
 
-deleteWallpaper :: (MonadUnliftIO m) => FilePath -> WallpaperName -> m ()
+type WallpaperDir = FilePath
+
+deleteWallpaper :: (MonadUnliftIO m) => WallpaperDir -> WallpaperName -> m ()
 deleteWallpaper dir name =
   catch
     (deleteFileIfExists $ dir </> name)
     (throwIO . deleteWallpaperExceptionHandler dir name)
 
 deleteWallpaperExceptionHandler ::
-  FilePath -> WallpaperName -> IOError -> WallhavenSyncException
+  WallpaperDir -> WallpaperName -> IOError -> WallhavenSyncException
 deleteWallpaperExceptionHandler dir name e
   | isPermissionError e =
       let oneLine =
@@ -32,14 +34,14 @@ deleteWallpaperExceptionHandler dir name e
         (show e)
 
 saveWallpaper ::
-  (MonadUnliftIO m) => FilePath -> WallpaperName -> Wallpaper -> m ()
+  (MonadUnliftIO m) => WallpaperDir -> WallpaperName -> Wallpaper -> m ()
 saveWallpaper dir name wallpaper = do
   catch
     (writeBinaryFile (dir </> name) wallpaper)
     (throwIO . saveWallpaperExceptionHandler dir name)
 
 saveWallpaperExceptionHandler ::
-  FilePath -> WallpaperName -> IOError -> WallhavenSyncException
+  WallpaperDir -> WallpaperName -> IOError -> WallhavenSyncException
 saveWallpaperExceptionHandler dir name e
   | isPermissionError e =
       let oneLine =
@@ -52,13 +54,13 @@ saveWallpaperExceptionHandler dir name e
         ("failed to save wallpaper to file " <> (dir </> name))
         (show e)
 
-initDB :: (MonadUnliftIO m) => FilePath -> m ()
+initDB :: (MonadUnliftIO m) => WallpaperDir -> m ()
 initDB dir =
   catch
     (createDirectoryIfMissing True dir)
     (throwIO . initDBExceptionHandler dir)
 
-initDBExceptionHandler :: FilePath -> IOError -> WallhavenSyncException
+initDBExceptionHandler :: WallpaperDir -> IOError -> WallhavenSyncException
 initDBExceptionHandler dir e
   | isPermissionError e =
       let oneLine =
@@ -72,14 +74,14 @@ initDBExceptionHandler dir e
         ("failed to create wallpaper directory '" <> dir <> "'")
         (show e)
 
-getDownloadedWallpapers :: (MonadUnliftIO m) => FilePath -> m [WallpaperName]
+getDownloadedWallpapers :: (MonadUnliftIO m) => WallpaperDir -> m [WallpaperName]
 getDownloadedWallpapers dir =
   catch
     (listDirectory dir)
     (throwIO . getDownloadedWallpapersExceptionHandler dir)
 
 getDownloadedWallpapersExceptionHandler ::
-  FilePath -> IOError -> WallhavenSyncException
+  WallpaperDir -> IOError -> WallhavenSyncException
 getDownloadedWallpapersExceptionHandler dir e
   | isPermissionError e =
       let oneLine =
