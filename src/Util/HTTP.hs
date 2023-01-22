@@ -15,9 +15,9 @@ import Network.HTTP.Simple
     httpBS,
   )
 import Network.HTTP.Types (tooManyRequests429)
-import Retry (MaxAttempts, RetryDelayMicros, retryM)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (throwIO, try)
+import Util.Retry (MaxAttempts, RetryDelayMicros, retryM)
 
 httpBSWithRetry ::
   (MonadUnliftIO m) =>

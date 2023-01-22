@@ -1,4 +1,4 @@
-module RetrySpec (spec) where
+module Util.RetrySpec (spec) where
 
 import Control.Monad.State (get, liftIO, modify, runStateT)
 import Retry
