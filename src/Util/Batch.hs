@@ -1,5 +1,6 @@
-module Util.Batch (batchedM) where
+module Util.Batch (batchedM, batchedM_) where
 
+import Control.Monad (void)
 import UnliftIO (MonadUnliftIO, mapConcurrently)
 import qualified Util.List as List
 
@@ -12,3 +13,7 @@ batchedM size f =
   fmap concat
     . mapM (mapConcurrently f)
     . List.batches size
+
+batchedM_ ::
+  (MonadUnliftIO m) => Int -> (a -> m b) -> [a] -> m ()
+batchedM_ size f = void . batchedM size f

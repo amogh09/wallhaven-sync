@@ -3,15 +3,19 @@ module Wallhaven.Action (deleteUnlikedWallpapers, syncAllWallpapers) where
 import Control.Monad (forever, unless, when)
 import Control.Monad.Reader (MonadReader, asks)
 import qualified Data.List as List
+import Data.Time (diffUTCTime, getCurrentTime, nominalDiffTimeToSeconds)
+import Text.Printf (printf)
 import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
+import Util.Batch (batchedM_)
 import Wallhaven.Exception (WallhavenSyncException (..))
 import Wallhaven.Logic (wallpaperName)
 import Wallhaven.Monad
   ( HasDebug,
     HasDeleteUnliked,
     HasLog,
+    HasSyncParallelization,
     MonadInitDB (initDB),
     MonadWallhaven,
     MonadWallpaperDB,
@@ -22,6 +26,7 @@ import Wallhaven.Monad
     getDeleteUnliked,
     getDownloadedWallpapers,
     getLog,
+    getSyncParallelization,
     saveWallpaper,
   )
 import Prelude hiding (log, writeFile)
@@ -30,6 +35,7 @@ type AppM env m =
   ( MonadReader env m,
     HasDeleteUnliked env,
     HasLog env,
+    HasSyncParallelization env,
     MonadWallhaven m,
     MonadWallpaperDB m,
     HasDebug env,
@@ -53,6 +59,7 @@ handleException e = do
 
 syncAllWallpapers' :: AppM env m => Username -> Label -> m ()
 syncAllWallpapers' username label = do
+  startTime <- liftIO getCurrentTime
   initDB
   urls <- getCollectionURLs username label
   let names = fmap wallpaperName urls
@@ -63,19 +70,33 @@ syncAllWallpapers' username label = do
     logLn "Following wallpapers were found to be unliked and so were deleted:"
     mapM_ logLn unliked
   syncWallpapers downloaded $ names `zip` urls
-  logLn "\nAll wallpapers synced successfully."
+  timeTaken <-
+    diffUTCTime
+      <$> liftIO getCurrentTime
+      <*> pure startTime
+  let timeTakenSecs = realToFrac (nominalDiffTimeToSeconds timeTaken) :: Double
+  logLn $
+    "\nAll wallpapers synced successfully in "
+      <> printf "%.2f" timeTakenSecs
+      <> " seconds."
 
 -- | Syncs the provided wallpapers with the database.
 syncWallpapers ::
   AppM env m => [WallpaperName] -> [(WallpaperName, FullWallpaperURL)] -> m ()
 syncWallpapers downloaded wallpapers = do
   progressVar <- newMVar 0
+  parallelization <- asks getSyncParallelization
   withAsync
     ( forever $ do
         printProgressBar progressVar (length wallpapers)
         threadDelay 100000
     )
-    (const $ mapM_ (uncurry $ syncWallpaper progressVar downloaded) wallpapers)
+    ( const
+        . batchedM_
+          parallelization
+          (uncurry (syncWallpaper progressVar downloaded))
+        $ wallpapers
+    )
   printProgressBar progressVar (length wallpapers)
 
 -- | Syncs a single wallpaper. Skips downloading if the wallpaper is already
