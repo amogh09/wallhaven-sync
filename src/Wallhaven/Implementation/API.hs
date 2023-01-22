@@ -6,7 +6,6 @@ import Data.ByteString (ByteString)
 import qualified Network.HTTP.Client.Conduit as HTTP
 import qualified Network.HTTP.Simple as HTTP
 import Network.HTTP.Types.Status (notFound404, unauthorized401)
-import Types (FullWallpaperURL, Label, Username)
 import UnliftIO (MonadUnliftIO, catch, throwIO)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import Wallhaven.API.Exception (CollectionURLsFetchException (..))
@@ -14,6 +13,7 @@ import Wallhaven.API.Types (APIKey)
 import Wallhaven.Exception
   ( WallhavenSyncException (CollectionFetchException, WallpaperDownloadException),
   )
+import Wallhaven.Types (FullWallpaperURL, Label, Username)
 
 getCollectionURLs ::
   (MonadUnliftIO m) => APIKey -> Username -> Label -> m [FullWallpaperURL]

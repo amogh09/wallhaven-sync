@@ -3,13 +3,6 @@ module Wallhaven.API.Action (getAllCollectionURLs, getFullWallpaper) where
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Network.HTTP.Simple (Request, parseRequest_)
-import Types
-  ( CollectionID,
-    FullWallpaperURL,
-    Label,
-    NumParallelDownloads,
-    Username,
-  )
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (catch, fromEither, throwIO)
 import Util.Batch (batchedM)
@@ -25,6 +18,13 @@ import Wallhaven.API.Logic
     wallhavenCollectionsRequest,
   )
 import Wallhaven.API.Types (APIKey, Page)
+import Wallhaven.Types
+  ( CollectionID,
+    FullWallpaperURL,
+    Label,
+    NumParallelDownloads,
+    Username,
+  )
 
 getAllCollectionURLs ::
   (MonadUnliftIO m) => APIKey -> Username -> Label -> m [FullWallpaperURL]

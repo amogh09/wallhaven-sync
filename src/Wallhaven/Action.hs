@@ -5,7 +5,6 @@ import Control.Monad.Reader (MonadReader, asks)
 import qualified Data.List as List
 import Data.Time (nominalDiffTimeToSeconds)
 import Text.Printf (printf)
-import Types (FullWallpaperURL, Label, Username, WallpaperName)
 import UnliftIO
 import UnliftIO.Concurrent (threadDelay)
 import Util.Batch (batchedM_)
@@ -30,6 +29,7 @@ import Wallhaven.Monad
     getSyncParallelization,
     saveWallpaper,
   )
+import Wallhaven.Types (FullWallpaperURL, Label, Username, WallpaperName)
 import Prelude hiding (log, writeFile)
 
 type AppM env m =

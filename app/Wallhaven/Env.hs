@@ -1,11 +1,22 @@
 module Wallhaven.Env (Env (..), Config (..)) where
 
 import Control.Monad.Reader (ReaderT, asks)
-import qualified Types
 import UnliftIO (MonadUnliftIO)
 import qualified Wallhaven.Implementation.API as API
 import qualified Wallhaven.Implementation.FileSystemDB as FileSystemDB
 import Wallhaven.Monad
+  ( HasDebug (..),
+    HasDeleteUnliked (..),
+    HasLog (..),
+    HasSyncParallelization (..),
+    MonadDeleteWallpaper (..),
+    MonadDownloadWallpaper (..),
+    MonadGetCollectionURLs (..),
+    MonadGetDownloadedWallpapers (..),
+    MonadInitDB (..),
+    MonadSaveWallpaper (..),
+  )
+import qualified Wallhaven.Types as Types
 import Prelude hiding (log)
 
 -- Environment record

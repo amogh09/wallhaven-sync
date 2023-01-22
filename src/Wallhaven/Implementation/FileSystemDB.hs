@@ -10,12 +10,12 @@ where
 
 import System.FilePath ((</>))
 import System.IO.Error (isPermissionError)
-import Types (Wallpaper, WallpaperName)
 import UnliftIO
 import UnliftIO.Directory
 import UnliftIO.IO.File
 import Util.FileSystem (deleteFileIfExists)
 import Wallhaven.Exception
+import Wallhaven.Types (Wallpaper, WallpaperName)
 
 type WallpaperDir = FilePath
 

@@ -1,7 +1,7 @@
 module Wallhaven.API.Types where
 
 import Data.Aeson (FromJSON (parseJSON), withObject, (.:))
-import Types (CollectionID, FullWallpaperURL, Label)
+import Wallhaven.Types (CollectionID, FullWallpaperURL, Label)
 
 type APIKey = String
 

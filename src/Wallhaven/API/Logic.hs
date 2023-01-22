@@ -14,9 +14,14 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.List as List
 import qualified Network.HTTP.Simple as HTTP
-import Types
 import qualified Wallhaven.API.Exception as Exception
 import Wallhaven.API.Types
+import Wallhaven.Types
+  ( CollectionID,
+    FullWallpaperURL,
+    Label,
+    Username,
+  )
 
 findCollectionByLabel ::
   String -> WallhavenCollectionsResponse -> Maybe WallhavenCollection

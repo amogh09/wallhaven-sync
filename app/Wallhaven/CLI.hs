@@ -2,9 +2,9 @@ module Wallhaven.CLI (runCLIApp) where
 
 import Control.Monad.Reader (ReaderT (runReaderT))
 import Options.Applicative
-import Types
 import Wallhaven.Action (syncAllWallpapers)
 import Wallhaven.Env (Config (Config), Env (Env))
+import Wallhaven.Types
 
 defaultWallpaperDir :: FilePath
 defaultWallpaperDir = "/Users/home/wallpapers"
