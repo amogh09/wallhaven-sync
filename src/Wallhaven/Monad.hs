@@ -15,7 +15,13 @@ module Wallhaven.Monad
 where
 
 import Data.ByteString (ByteString)
-import Types
+import Wallhaven.Types
+  ( FullWallpaperURL,
+    Label,
+    Username,
+    Wallpaper,
+    WallpaperName,
+  )
 
 class HasDebug a where
   getDebug :: a -> Bool

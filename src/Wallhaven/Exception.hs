@@ -3,8 +3,13 @@ module Wallhaven.Exception
   )
 where
 
-import Types
 import UnliftIO (Exception, Typeable)
+import Wallhaven.Types
+  ( FullWallpaperURL,
+    Label,
+    Username,
+    WallpaperName,
+  )
 
 type OneLineError = String
 

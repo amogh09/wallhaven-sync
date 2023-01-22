@@ -1,4 +1,4 @@
-module Types where
+module Wallhaven.Types where
 
 import Data.ByteString (ByteString)
 

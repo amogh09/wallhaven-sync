@@ -1,9 +1,9 @@
 module Wallhaven.API.Exception where
 
 import qualified Network.HTTP.Simple as HTTP
-import Types (CollectionID, Label)
 import UnliftIO.Exception (Exception, Typeable)
 import Wallhaven.API.Types (Page)
+import Wallhaven.Types (CollectionID, Label)
 
 type JSONParseError = String
 

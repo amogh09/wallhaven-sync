@@ -17,13 +17,13 @@ source-repository head
 
 library wallhaven-sync-internal
     exposed-modules:
-        Types
         Util.Time
         Util.Retry
         Util.List
         Util.Batch
         Util.HTTP
         Util.FileSystem
+        Wallhaven.Types
         Wallhaven.Logic
         Wallhaven.Exception
         Wallhaven.Monad
