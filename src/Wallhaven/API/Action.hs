@@ -4,8 +4,14 @@ import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Network.HTTP.Simple (Request, parseRequest_)
 import Types
+  ( CollectionID,
+    FullWallpaperURL,
+    Label,
+    NumParallelDownloads,
+    Username,
+  )
 import UnliftIO (MonadUnliftIO)
-import UnliftIO.Exception
+import UnliftIO.Exception (catch, fromEither, throwIO)
 import Util.Batch (batchedM)
 import Util.HTTP (httpBSWithRetry, isTooManyRequestsException)
 import qualified Util.Retry as Retry
@@ -18,7 +24,7 @@ import Wallhaven.API.Logic
     wallhavenCollectionPageRequest,
     wallhavenCollectionsRequest,
   )
-import Wallhaven.API.Types (APIKey)
+import Wallhaven.API.Types (APIKey, Page)
 
 getAllCollectionURLs ::
   (MonadUnliftIO m) => APIKey -> Username -> Label -> m [FullWallpaperURL]

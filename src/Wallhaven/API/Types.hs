@@ -5,6 +5,8 @@ import Types (CollectionID, FullWallpaperURL, Label)
 
 type APIKey = String
 
+type Page = Int
+
 data WallhavenCollection = WallhavenCollection
   { wallhavenCollectionID :: CollectionID,
     wallhavenCollectionLabel :: Label
