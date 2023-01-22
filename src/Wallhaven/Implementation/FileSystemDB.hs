@@ -1,6 +1,12 @@
 -- Provides functions that implement Wallhaven Database interface to be used when
 -- constructing environments.
-module Wallhaven.Implementation.FileSystemDB (deleteWallpaper, saveWallpaper, initDB, getDownloadedWallpapers) where
+module Wallhaven.Implementation.FileSystemDB
+  ( deleteWallpaper,
+    saveWallpaper,
+    initDB,
+    getDownloadedWallpapers,
+  )
+where
 
 import System.FilePath ((</>))
 import System.IO.Error (isPermissionError)
