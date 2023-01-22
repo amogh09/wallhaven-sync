@@ -47,6 +47,9 @@ instance HasDeleteUnliked Env where
 instance HasLog Env where
   getLog = envLog
 
+instance HasSyncParallelization Env where
+  getSyncParallelization = configNumParallelDownloads . envConfig
+
 instance (MonadUnliftIO m) => MonadGetCollectionURLs (ReaderT Env m) where
   getCollectionURLs username label = do
     apiKey <- asks (configWallhavenAPIKey . envConfig)

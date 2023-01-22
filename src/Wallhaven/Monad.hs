@@ -10,6 +10,7 @@ module Wallhaven.Monad
     MonadWallpaperDB,
     MonadWallhaven,
     MonadDownloadWallpaper (..),
+    HasSyncParallelization (..),
   )
 where
 
@@ -24,6 +25,9 @@ class HasDeleteUnliked a where
 
 class HasLog a where
   getLog :: a -> (String -> IO ())
+
+class HasSyncParallelization a where
+  getSyncParallelization :: a -> Int
 
 -- | Monad for interacting with a database for wallpapers.
 type MonadWallpaperDB m =
