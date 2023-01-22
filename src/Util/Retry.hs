@@ -1,4 +1,4 @@
-module Retry (retryM, MaxAttempts, RetryDelayMicros) where
+module Util.Retry (retryM, MaxAttempts, RetryDelayMicros) where
 
 import UnliftIO (MonadIO)
 import UnliftIO.Concurrent (threadDelay)
