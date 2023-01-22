@@ -10,12 +10,13 @@ import Types (FullWallpaperURL, Label, Username)
 import UnliftIO (MonadUnliftIO, catch, throwIO)
 import qualified Wallhaven.API.Action as WallhavenAPI
 import Wallhaven.API.Exception (CollectionURLsFetchException (..))
+import Wallhaven.API.Types (APIKey)
 import Wallhaven.Exception
   ( WallhavenSyncException (CollectionFetchException, WallpaperDownloadException),
   )
 
 getCollectionURLs ::
-  (MonadUnliftIO m) => String -> Username -> Label -> m [FullWallpaperURL]
+  (MonadUnliftIO m) => APIKey -> Username -> Label -> m [FullWallpaperURL]
 getCollectionURLs apiKey username label =
   catch
     (WallhavenAPI.getAllCollectionURLs apiKey username label)
